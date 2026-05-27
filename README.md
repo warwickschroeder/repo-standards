@@ -1,2 +1,1 @@
-# renovate-config
-renovate-config
+# Repository Standards
