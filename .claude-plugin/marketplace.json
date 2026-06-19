@@ -1,0 +1,16 @@
+{
+  "name": "repo-standards",
+  "owner": {
+    "name": "Warwick Schroeder",
+    "url": "https://github.com/warwickschroeder"
+  },
+  "plugins": [
+    {
+      "name": "regression-runbooks",
+      "source": "./plugins/regression-runbooks",
+      "description": "Exhaustively explore any web-app area and write tiered regression runbooks (manual + automated), self-improving after every run.",
+      "category": "testing",
+      "keywords": ["testing", "e2e", "regression", "runbooks", "qa"]
+    }
+  ]
+}
