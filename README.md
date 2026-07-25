@@ -49,3 +49,20 @@ branch. To pin a version, reference a tag: `github>warwickschroeder/repo-standar
 - Dependency **groups** (e.g. Radix, EF Core, MUI, Azure, ESLint).
 - **`allowedVersions`** pins (holding a major back until the ecosystem catches up).
 - Any per-repo override (e.g. `prHourlyLimit: 0` to flush the whole weekly batch).
+
+## Claude Code plugins
+
+This repo doubles as a plugin marketplace. Add it once, then install what a repo needs:
+
+```
+/plugin marketplace add warwickschroeder/repo-standards
+```
+
+| Plugin | What it does |
+| --- | --- |
+| [`regression-runbooks`](./plugins/regression-runbooks/) | Exhaustively explore a web-app area and author tiered regression runbooks that drive both manual and automated testing. The **standing** coverage. |
+| [`smoke-tests`](./plugins/smoke-tests/) | Write short manual test scripts for one change, or for everything since the last release so a tester can target only what changed. The **delta** — cites runbook cases rather than restating them. |
+
+## Blueprints
+
+[`Blueprints/`](./Blueprints/) holds the org-wide architecture blueprints a repo is expected to conform to.

@@ -1,0 +1,170 @@
+# Smoke Tests — Reference
+
+Mechanics for the `smoke-tests` skill. The workflow and the rules are in `SKILL.md`; this file is the detail behind each phase.
+
+---
+
+## §1 — Scoping from the diff
+
+### A change smoke test
+
+The branch or PR diff. Nothing more — resist widening it to "while we're here".
+
+### A release smoke test
+
+```bash
+git tag --sort=-creatordate | head -5          # find the last release tag
+git log -1 --format='%ci %s' <lasttag>         # when it was cut
+git diff --stat <lasttag>..HEAD -- <src>       # what actually changed in product code
+git status --short                             # uncommitted work that is ALSO shipping
+```
+
+Three rules:
+
+1. **Product code only.** A test-only or docs-only commit changes nothing a tester can observe. Excluding it is correct; **saying you excluded it** is what stops the reader wondering whether you missed something. One line in *What changed* is enough: "the rest is tests, docs and dependency bumps".
+2. **Include the working tree when it is shipping.** `git status` before you scope. A release cut from a branch with uncommitted work in it includes that work.
+3. **Read the diff, not the subjects.** Commit messages describe intent; the diff describes behaviour. Contract changes — a response shape, a default page size, an auth policy — frequently arrive inside a commit whose subject says something else entirely.
+
+### Classifying what you find
+
+| Class | Recognise it by | Where it lands |
+| --- | --- | --- |
+| **User-observable** | a control's state, a new message, a changed layout | a step |
+| **Operator-observable** | a log line, a counter, a job state, a health signal | a step, usually with SQL or a log check |
+| **Contract** | a response shape, a status code, a paging default, an auth policy | *Watch out for* — no screen shows it, and non-UI callers break silently |
+| **Invisible but risky** | migrations, constraints, security headers, rate limits, startup guards | a step, and often step 1 |
+
+The class that gets missed is **contract**. A response that changed from an array to `{ items, total }` looks fine in the app — the app was updated with it — and breaks every script, report and integration that wasn't.
+
+### Dependency upgrades
+
+A framework major (a router, a UI library, a test runner) rarely gets its own step, but it decides **which existing journeys are worth re-walking**. A router upgrade means sign-in, sign-out, redirects and guards; a UI-library major means the controls it renders. Cite the runbook cases that already cover those and say why they are in scope.
+
+---
+
+## §2 — The risk table, row by row
+
+Six rows. Each answers one question a person deploying this needs answered.
+
+| Row | Answers | Gets it wrong by |
+| --- | --- | --- |
+| **Scope** | what is reached | listing files instead of areas |
+| **Migration** | can the deploy fail? | saying "yes" without saying whether existing rows are normalised first |
+| **Config** | what must be set before deploying | listing keys that changed internally but need no action |
+| **Runbooks** | what standing coverage exists, and did it move | naming files without saying "unchanged" or which cases were added |
+| **Watch out for** | the adjacent thing most likely to break | repeating *What changed* instead of naming a side effect |
+| **If it breaks** | how to get back | "revert" — when the migration doesn't revert with it |
+
+**Risk levels.** `low` — contained, reversible, no data touched. `medium` — a shared path or a visible surface many people use. `high` — the deploy itself can fail, data is rewritten, or a security boundary moved. `critical` — data loss or a breach is on the table if it's wrong. One sentence of why, on the same line.
+
+**Migrations deserve the most care.** Answer three things: what it does, when it runs, and whether it normalises existing rows before tightening. A constraint added without a normalising step ahead of it fails on real data — and if migrations run at app startup, that is not a bug report, it is a container that won't boot. That migration is step 1 of the smoke test, with the query that proves the data is clean, run **before** the deploy.
+
+---
+
+## §3 — Runbook interplay
+
+If the repo has regression runbooks (see the `regression-runbooks` plugin), they are the **standing** coverage and the smoke test is the **delta**. Getting this boundary right is most of what makes a smoke test short.
+
+### Cite, don't restate
+
+Where a runbook case already walks the journey:
+
+```markdown
+14. **The reshaped responses didn't break the ordinary path.** (follows `TC-DEL-S1`, `TC-DEL-T3`)
+    Run `TC-DEL-S1` end to end, then a bulk restore (`TC-DEL-T3`).
+    **Expect:** both behave exactly as their runbooks say. The response shape changed this release, so a clean runbook pass **is** the test.
+```
+
+Three words — "follows `TC-DEL-S1`" — replace a paragraph, and the tester recognises what they are being asked to do. Restating the journey in your own words creates a second description of the same thing that drifts the moment either changes.
+
+Use `(follows …)` when the step *is* that case, and `(extends …)` when it adds a new assertion to it.
+
+### Push permanent behaviour back up
+
+A smoke test is read once and then it is history. If the change introduces behaviour a tester should check **forever**, it belongs in the runbook. Flag it inline, right where you noticed it:
+
+```markdown
+> *Runbook gap:* `document-library.md` `TC-LIB-T3` doesn't cover which controls disable during a search. Add it.
+```
+
+Then offer to write the case. If the repo keeps runbook cases 1:1 with e2e specs, the case ships with its spec test — a documented case nothing runs is silent rot.
+
+### The smell
+
+A release smoke test whose steps are **all** novel means one of two things: the runbooks are thin (so the gaps list should be long), or the steps are restating coverage that already exists (so they should be citations). Neither is a script that stays short.
+
+---
+
+## §4 — Writing a step
+
+Three lines. Title, action, Expect.
+
+```markdown
+9. **An over-long project tag is refused.** (extends `TC-TAG-T2`)
+   **Admin › Project tags** → paste 101 characters into **New tag name** → **Add tag**.
+   **Expect:** `name must be at most 100 characters.` No tag created. 100 characters still works.
+```
+
+- **Title** — what it *proves*, in plain words. Not "test the tag cap"; a claim that can be true or false.
+- **Action** — a click path (`**A › B** → **C**`) or a command. Exact control names. No prose around it.
+- **Expect** — the one observable outcome. Quote exact error strings; name the column if the check is in the database.
+
+### Good vs. bad
+
+| Bad | Why | Good |
+| --- | --- | --- |
+| "Check that validation works" | no pass condition | "**Expect:** `name must be at most 100 characters.` No tag created." |
+| "This was a bug because the endpoint never trimmed…" | rationale, not instruction | delete it; it belongs in the PR |
+| "Click the Sync button" | invented from memory | read the component; it may be an icon button with a state-dependent tooltip |
+| "Verify the list is correct" | unfalsifiable | name the row, the count, or the column value |
+
+### When it can't be tested by hand
+
+Say so, name what covers it, and move on:
+
+```markdown
+**Not testable by hand:** the truncation notice needs 200+ rows in one list — integration tests cover it.
+```
+
+This is not an omission, it is a finding. Silently dropping it reads as "covered".
+
+### Order
+
+Cheapest and most blocking first. A migration pre-flight that must run **before** the deploy is step 1. Then startup, then the areas, grouped under `###` headings when there are more than about eight steps — which a release smoke test usually has.
+
+---
+
+## §5 — Reaching what the UI can't
+
+Three recurring cases. All are legitimate; inventing a screen instead is not.
+
+**A server guard above the client's own limit.** A textarea with `maxLength=1000` means the server's 1000-character cap is unreachable in the browser. Give the API call. Say why in half a sentence — "the textarea stops you at 1000, so this one needs curl" — so the tester doesn't think they are being asked to do it the hard way for no reason.
+
+**A surface with no UI.** Give the SQL or the API path. Never describe a screen that doesn't exist.
+
+**Something one session can't produce.** A concurrent race, a row that predates the change, an identity the persona roster doesn't offer, a file that has become unreadable. Drive it with an out-of-band database write or a raw API call carrying whatever the repo's test-auth mechanism uses. Example — forcing a read failure without touching storage:
+
+```sql
+UPDATE search."Documents"
+   SET "SourceBlobPath" = 'missing/nothing.txt', "ContentIndexedAt" = NULL
+ WHERE "FileName" = '<your file>';
+```
+
+**One app instance, one signed-in session** stays the rule. Never a second browser, profile, device or tab. A scenario that genuinely needs two live sessions — a true concurrency race — is a signal to cover it with an integration test: say so rather than writing a step nobody can run.
+
+**What local dev can't prove.** If production serves the app differently from dev — a real server applying security headers where a dev server doesn't, real TLS activating HSTS, a real identity provider — mark those steps as second-environment. Asserting them locally is worse than omitting them: it reports a pass that proves nothing.
+
+---
+
+## §6 — Format gates
+
+```bash
+grep -c "## Results" <file>                    # 0 — there is no Results section
+grep -n "^## " <file>                          # exactly: What changed / Before you start / Steps
+grep -cE '^[0-9]+\. \*\*' <file>               # step count
+grep -c '\*\*Expect:\*\*' <file>               # must equal the step count
+```
+
+Hard-wrapping has no reliable automated check — long lines are the goal, so a max-line-length rule would fail the format by design. Confirm by eye that each paragraph, bullet and table row sits on one line. Code inside a fenced block is exempt: wrap it however it reads best.
+
+Then the judgement call the greps can't make: **read it as the tester**. Could someone who has never seen this change follow it end to end, and could they tell pass from fail on every step? If a step's Expect could be argued either way, it isn't finished.
