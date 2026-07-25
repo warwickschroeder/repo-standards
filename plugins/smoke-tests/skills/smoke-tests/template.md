@@ -19,7 +19,11 @@ Full rules: the smoke-tests SKILL.md. The short version:
 
 ## What changed
 
-<Three or four short sentences. What the app does differently, and what someone would notice. Nothing visible? Say so, and say what it protects.>
+<One sentence of lead-in — what the app does differently overall. Nothing visible? Say so, and say what it protects.>
+
+- <One dot point per distinct change, in the words of someone who'd notice it. **Dot points, not a paragraph**, whenever there is more than one thing — and a release is always more than one thing.>
+- <Group related behaviour into one point rather than splitting a single change across three.>
+- <Excluded churn — test-only, docs-only, dependency bumps — gets its own final point rather than going unsaid.>
 
 **Risk: <low | medium | high | critical>** — <one sentence>
 
@@ -31,6 +35,8 @@ Full rules: the smoke-tests SKILL.md. The short version:
 | Runbooks | <the runbooks covering these surfaces; "unchanged" or the cases added. Include the command to run them.> |
 | Watch out for | <the adjacent thing most likely to break — especially a contract change that breaks non-UI callers silently> |
 | If it breaks | <how to get back; is the migration reversible?> |
+
+<A cell listing three or more things — modules reached, contract changes, config keys — gets dot points too: `<ul><li>…</li></ul>` inside the cell. A `·`-separated run-on is the thing a reader skips.>
 
 ## Before you start
 

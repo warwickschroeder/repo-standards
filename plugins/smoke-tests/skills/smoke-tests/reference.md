@@ -42,7 +42,20 @@ A framework major (a router, a UI library, a test runner) rarely gets its own st
 
 ---
 
-## §2 — The risk table, row by row
+## §2 — What changed: the summary and the risk table
+
+### The summary is a list
+
+One sentence of lead-in, then **a dot point per distinct change**. A paragraph that runs four changes together reads as one thing, and the reader who only wanted to know whether their area moved has to parse the whole thing to find out. Prose is right for exactly two cases: the lead-in sentence, and a smoke test covering a single change.
+
+| | |
+| --- | --- |
+| **Good** | `- Sign-in is stricter: no email in the token means no profile, and a taken email gets a 409 instead of an empty 500.` |
+| **Bad** | `Responses now carry security headers, every filter is capped, sign-in is stricter, and the SPA moved to Router v8.` |
+
+One point per change a tester would recognise — not one per commit, and not one per file. Related behaviour that ships together and is proved by the same step is one point. The excluded churn (test-only, docs-only, dependency bumps) is a point of its own, so its absence isn't mistaken for an oversight.
+
+### The risk table
 
 Six rows. Each answers one question a person deploying this needs answered.
 
@@ -54,6 +67,8 @@ Six rows. Each answers one question a person deploying this needs answered.
 | **Runbooks** | what standing coverage exists, and did it move | naming files without saying "unchanged" or which cases were added |
 | **Watch out for** | the adjacent thing most likely to break | repeating *What changed* instead of naming a side effect |
 | **If it breaks** | how to get back | "revert" — when the migration doesn't revert with it |
+
+**A cell that enumerates gets dot points too.** *Scope* pairing eight modules with what moved in each, or *Watch out for* naming four contract changes, is a list — write it as `<ul><li>…</li></ul>` inside the cell, which every renderer handles and which lets a reader find their own module at a glance. This is the one place HTML belongs in a smoke test. Two tests: does each item carry its own clause, and are there three or more of them? A bare run of names with nothing attached (the runbook files covering the change) reads fine inline, and a row holding one answer (*Migration: No*, *Config: None*) stays one line.
 
 **Risk levels.** `low` — contained, reversible, no data touched. `medium` — a shared path or a visible surface many people use. `high` — the deploy itself can fail, data is rewritten, or a security boundary moved. `critical` — data loss or a breach is on the table if it's wrong. One sentence of why, on the same line.
 

@@ -1,6 +1,6 @@
 {
   "name": "smoke-tests",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Write short, plain-language smoke tests a human runs by hand — for one change, or for everything since the last release so a tester can target only what changed. Scopes itself from the diff, reuses the repo's regression runbooks instead of restating them, and pushes permanent cases back into them.",
   "author": {
     "name": "Warwick Schroeder",

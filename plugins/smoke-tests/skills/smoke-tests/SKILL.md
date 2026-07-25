@@ -74,6 +74,8 @@ Note as you go:
 
 Copy `template.md`. Four sections, nothing else: the title + links line, **What changed**, **Before you start**, **Steps**.
 
+**What changed lists, it doesn't narrate.** More than one distinct change → **dot points, one per change**, not a paragraph that runs them together. Prose is for the single sentence of lead-in and for the one-change case. The same goes inside the risk table: a cell holding three or more items that each carry their own clause — a module and what moved in it, four contract changes — uses `<ul><li>…</li></ul>` rather than a `·`-separated run-on.
+
 Each step is **three lines**: a bold plain-language title saying what it proves, the action as a click path or command, and an `**Expect:**` line. Nothing else — no background, no "why this bug existed", no acceptance-criteria mapping. That belongs in the spec doc or the PR body.
 
 ### Phase 6 — Self-check
@@ -107,7 +109,7 @@ Then read it as the tester: **could someone who has never seen this change follo
 | Blank smoke test | `template.md` |
 | Per-repo profile skeleton | `template-profile.md` |
 | Scoping a release from the diff | `reference.md` §1 |
-| The risk table, row by row | `reference.md` §2 |
+| *What changed* — the summary list and the risk table, row by row | `reference.md` §2 |
 | Runbook interplay — cite vs. push back | `reference.md` §3 |
 | Writing a step (worked examples, good vs. bad) | `reference.md` §4 |
 | Reaching what the UI can't (curl, SQL, test-auth headers) | `reference.md` §5 |
@@ -116,6 +118,7 @@ Then read it as the tester: **could someone who has never seen this change follo
 ## Common mistakes
 
 - **Writing one nobody asked for.** The first and most common failure.
+- **Writing *What changed* as a paragraph** when it is a list of four changes — the reader can't find their own area in it.
 - **Scoping from commit subjects** instead of the diff — misses contract changes with no commit of their own, and pads the script with test-only churn.
 - **Restating a runbook case in different words** instead of citing it, so the two drift.
 - **Burying the pass condition** inside a paragraph of rationale — the format's whole point is that a tester can skim to the bold **Expect:**.
