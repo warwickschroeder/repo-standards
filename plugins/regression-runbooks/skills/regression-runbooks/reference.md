@@ -48,6 +48,23 @@ three — only the **Setup** and the **verification lane** differ.
 
 ## §2 Reusable mechanics
 
+> **Read the architecture note first.** The persistence mechanics in this section
+> and in §3 were written for an **offline-first** app. Sync triggers, dirty /
+> unsynced badges, local-store clearing, two-profile conflict and tombstone
+> propagation exist **only** in that architecture. Determine the app's
+> architecture in Phase 1 (`SKILL.md`) and use only the matching mechanics:
+>
+> | Architecture | Write-proof | Read-back proof | Concurrency proof |
+> |---|---|---|---|
+> | **Online CRUD** | success signal + list/detail re-fetch | reload → reopen the record | the app's real guard: unique-key 409, already-actioned 409, last-write-wins, optimistic token, or a delete racing a worker |
+> | **Offline-first / sync** | pending badge → sync → badge clears | clear local store → sync → reopen | §3c two-profile conflict + tombstone propagation |
+> | **Realtime / push** | success signal + a second session converging with no reload | reload → reopen | two sessions converging |
+> | **Eventual consistency** | success signal + poll-until-consistent | reload → poll | poll-until-consistent; honest interim state |
+>
+> **A mechanic the app doesn't have is deleted from the runbook, not written up
+> as an "absent" case.** Record the absence once as an `absent:<reason>` row in
+> the Coverage map (SKILL.md Non-negotiables).
+
 ### Navigate
 
 Use the app's primary navigation (sidebar, top bar, breadcrumbs) to reach the
@@ -109,11 +126,29 @@ the tier.
 3. Navigate to the area; the row must be present with the same field values.
 4. (Remote unchanged — this proves the pull path end-to-end.)
 
-### 3c. Conflict proof (Full)
+### 3c. Concurrency proof (Full) — pick the variant for the architecture
 
-Conflicts require the *same row* mutated in two separate sessions before a
-sync. Use a **second browser profile/context** (isolated storage) for the
-second session:
+**This recipe below is the offline-first variant.** For the other architectures:
+
+- **Online CRUD** — there is no sync to conflict on. Test the app's *actual*
+  contention guard, and only where one exists: a unique-key **409**, an
+  already-actioned **409** (two users deciding the same item), a last-write-wins
+  column, an optimistic-concurrency token, or a delete racing a background
+  worker. If a Targeted/F3 case already covers that guard, **do not write a
+  second case** — point the `concurrency:*` coverage row at the existing one.
+  If the surface genuinely has no contention (a singleton row one role writes, a
+  create-only form, a caller-scoped personal setting), record
+  `absent:<reason>` in the Coverage map and write no case at all.
+- **Realtime / push** — concurrency surfaces as **convergence**: with two
+  sessions open on the same screen, a change made in session 1 appears in
+  session 2 **without a reload**. Assert session 2's UI, never a sync indicator.
+- **Eventual consistency** — assert poll-until-consistent, and that the interim
+  UI is honest (a pending/processing state) rather than stale data shown as
+  current.
+
+**Offline-first variant.** Conflicts require the *same row* mutated in two
+separate sessions before a sync. Use a **second browser profile/context**
+(isolated storage) for the second session:
 
 1. Profile 1: edit row R, field X → value `P1`. **Do not sync.**
 2. Profile 2 (same user/tenant): edit row R, field X → value `P2`. **Sync.**
@@ -437,6 +472,60 @@ try {
 
 > These are common web-app (MUI/React/Playwright-class) gotchas. Repo-specific
 > gotchas live in the repo's `.claude/regression-runbooks/profile.md`.
+
+---
+
+#### Template scaffolding the app cannot have (the "13 apologies" smell)
+
+**2026-07-26, Forge.Translation.** This template began life in an offline-first
+app, so `F2 — sync conflict + soft-delete propagation` was marked *mandatory*.
+Forge.Translation is online CRUD (React SPA → ASP.NET → Postgres, no local
+store). Every one of its **13** runbooks therefore carried a `### TC-…-F2`
+heading whose entire body explained why sync didn't apply — 13 separate
+apologies for the same absent feature, plus 5 more phantom `F1` headings saying
+"covered by S1". Eighteen case headings, zero test coverage, and no spec
+referenced any of them.
+
+- **Cause:** the template presented one architecture's mechanics as universal,
+  and the repo's own reference told authors to *"state that in each runbook"* —
+  turning a one-line fact into an N-file obligation.
+- **Fix:** delete the section; record the absence **once** as an
+  `absent:<reason>` row in that runbook's Coverage map, which is what the
+  Phase 4 gate reads anyway. Retire the ID rather than reusing it.
+- **Detect it:** `grep -rn "Absent" docs/runbooks/` — every hit that is a
+  **case heading** rather than a coverage-map row is one of these.
+- **Generalises to any template section**, not just sync: if the app has no
+  delete UI, no offline store, no second session, don't write a case that exists
+  only to say so.
+
+#### Runbooks only a developer can read
+
+Purposes #1 and #3 of a runbook are a **human** running it by hand, often
+someone who has never seen the codebase. A case whose only statement of intent
+is a `getByRole` step table fails those purposes silently — it looks complete
+and is unrunnable by its actual audience.
+
+- Give every case a two-line plain-English block (what you're doing; what a real
+  user loses if it fails) and every step table an **`In plain English`** column.
+- **Add the column — never reword `Expected`.** `Expected` is the contract the
+  spec is generated from (roles, DB columns, exact error strings, `exact:` /
+  `.first()` notes). Softening it to read nicely silently weakens the automated
+  test. Both columns must hold for a step to pass.
+- Put the legend (columns, action verbs, verification Lanes, personas,
+  `{RUNID}`) **once** in the runbooks README and link it from each file, rather
+  than re-explaining it per runbook.
+- Tell manual testers which parts to ignore: `Automated:` lines, selector notes
+  and the Testability-gaps table are for the spec, not for them.
+
+#### Per-runbook automation notes drift from reality
+
+A trailing "**pending the first green harness run**" that survives three green
+runs makes the whole file untrustworthy — and in Forge.Translation two files
+contradicted **their own Run record a dozen lines above**, while a third
+described a bug a harness run had found and fixed while still claiming no run
+had happened. Re-derive these notes mechanically from the specs
+(`grep -o "TC-[A-Z]*-[STF][0-9]*" e2e/**/*.spec.ts | sort -u`) instead of
+hand-editing them, and check them whenever you touch the file.
 
 ---
 

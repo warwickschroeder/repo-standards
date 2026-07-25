@@ -24,6 +24,35 @@
 
 ---
 
+## 1a. Persistence architecture (**decides which template sections apply**)
+
+<!-- FILL THIS IN BEFORE WRITING ANY RUNBOOK. The runbook template originated in an
+     offline-first app; several of its mechanics exist only for that architecture.
+     Getting this wrong is what produces phantom "Absent — not applicable" cases in
+     every runbook in the repo (reference.md §8, "the 13 apologies smell").
+
+     Evidence to look for:
+       offline-first  → IndexedDB/SQLite/OPFS wrapper, a sync engine, a "Sync" button,
+                        an unsynced/pending count in the UI
+       online CRUD    → fetch/axios/TanStack Query straight to an API; no local DB
+       realtime       → SignalR / WebSocket / SSE client, server-pushed invalidation
+       eventual       → a queue/worker/projection between the write and the read model -->
+
+| Item | Value |
+|------|-------|
+| **Architecture** | `{{PLACEHOLDER — online CRUD | offline-first/sync | realtime/push | eventual consistency}}` |
+| **Evidence** | `{{PLACEHOLDER — e.g. "TanStack Query → REST; no IndexedDB, no sync engine in package.json"}}` |
+| **Write-proof for this app** | `{{PLACEHOLDER — e.g. "success toast + the list re-fetch"; or "pending badge → sync → badge clears"}}` |
+| **Read-back proof** | `{{PLACEHOLDER — e.g. "reload and reopen the record" / "clear local store, sync, reopen"}}` |
+| **Real concurrency surface(s)** | `{{PLACEHOLDER — e.g. "duplicate-name 409; two reviewers racing one decision; delete racing the worker" — or "none: singleton admin rows only"}}` |
+| **Template sections to DELETE** | `{{PLACEHOLDER — e.g. "sync trigger, dirty badge, local-state reset, two-profile conflict, tombstone propagation"}}` |
+
+> Whatever is listed as "to DELETE" is **removed from each runbook**, not carried
+> as an "Absent" placeholder case. Record each absence once, as an
+> `absent:<reason>` row in that runbook's Coverage map.
+
+---
+
 ## 2. e2e Harness
 
 <!-- Check for playwright.config.*, cypress.config.*, or similar in the root and package.json scripts.

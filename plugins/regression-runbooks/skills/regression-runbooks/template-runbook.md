@@ -47,7 +47,7 @@ C = second environment (staging/preview). See `reference.md §1` for setup steps
 
 <!-- Describe exactly what this runbook covers and what it does not. -->
 
-- **Covers:** {{description of what functionality is exercised, e.g. "Create, read, edit, and delete of {{Area}} records; required-field and cross-field validation; list filtering; sync round-trip"}}
+- **Covers:** {{description of what functionality is exercised, e.g. "Create, read, edit, and delete of {{Area}} records; required-field and cross-field validation; list filtering; the persistence round-trip"}}
 - **Out of scope:** {{anything explicitly not covered here, e.g. "CSV import → see import runbook; role-based access → see admin runbook"}}
 - **Parent rows required (FK order, see `reference.md §6`):**
   <!-- List the parent entities that must exist before any test case in this area can run. Walk the FK chain root-to-leaf. -->
@@ -69,20 +69,42 @@ C = second environment (staging/preview). See `reference.md §1` for setup steps
 
 ### TC-{{AREA}}-S1 — create a {{entity}} (happy path)
 
+<!-- MANDATORY plain-English block. Two lines, everyday words, no jargon:
+     what a person is doing, and what breaks for a real user if it fails.
+     A non-technical tester reads this and nothing else to know why they care. -->
+
+> **In plain English:** {{what you are doing, in one sentence a non-technical
+> tester understands}}.
+> **If this fails:** {{what a real user loses — the consequence, not the mechanism}}.
+
 - **Tier:** Smoke
-- **Preconditions:** parent rows from Scope above exist; auto-sync/auto-refresh off (`reference.md §2`).
+- **Preconditions:** parent rows from Scope above exist.
+  <!-- Offline-first / eventual-consistency apps ONLY: also disable auto-sync /
+       auto-refresh (`reference.md §2`) so a background tick can't fire between the
+       mutation and the assertion. Online-CRUD apps: delete this note. -->
 - **Steps:**
 
-  | # | Action | Target (`role "name"`) | Data | Expected |
-  | --- | --- | --- | --- | --- |
-  | 1 | goto | `{{/route}}` | — | {{Area}} list page; no errors |
-  | 2 | click | `button "New {{Area}}"` | — | URL → `{{/route}}/new`; create form visible |
-  | 3 | fill | `textbox "{{Primary field label, e.g. Name}}"` | `{{example value}} {RUNID}` | value set |
-  | 4 | fill | `textbox "{{Second required field}}"` | `{{example value}}` | value set |
-  | 5 | click | `button "Save"` | — | success signal (toast / redirect); URL → detail or list |
-  | 6 | expect | detail or list | — | new row/record `"{{example value}} {RUNID}"` visible |
+  <!-- The `Expected` column is the CONTRACT the spec is generated from — element
+       roles, DB columns, exact error strings, `exact:`/`.first()` notes. Never
+       reword it to read more nicely. `In plain English` is the same condition for
+       a human; both must hold for the step to pass. -->
 
-- **Persistence write-proof (`reference.md §3a`):** pending-change badge / dirty indicator increments after step 3–5 → trigger write (sync button or inline save) → success signal → indicator resets to 0 or "Saved".
+  | # | Action | Target (`role "name"`) | Data | Expected | In plain English |
+  | --- | --- | --- | --- | --- | --- |
+  | 1 | goto | `{{/route}}` | — | {{Area}} list page; no errors | The {{Area}} list opens. |
+  | 2 | click | `button "New {{Area}}"` | — | URL → `{{/route}}/new`; create form visible | A blank create form appears. |
+  | 3 | fill | `textbox "{{Primary field label, e.g. Name}}"` | `{{example value}} {RUNID}` | value set | Type a name — include your run tag so you can find it again. |
+  | 4 | fill | `textbox "{{Second required field}}"` | `{{example value}}` | value set | Fill in the other required field. |
+  | 5 | click | `button "Save"` | — | success signal (toast / redirect); URL → detail or list | Save it; you get a confirmation. |
+  | 6 | expect | detail or list | — | new row/record `"{{example value}} {RUNID}"` visible | Your new record is in the list. |
+
+- **Persistence write-proof (`reference.md §3a`) — use the row for this app's architecture (Phase 1):**
+  - **Online CRUD:** the server's success signal (toast / redirect / result panel) **plus** the
+    list or detail re-fetch showing the change. There is no sync step and no dirty badge.
+  - **Offline-first / sync:** pending-change badge increments after steps 3–5 → trigger the write
+    (sync button or inline save) → success signal → indicator resets to 0 or "Saved".
+  - **Realtime / push:** the success signal **plus** a second open session converging without a reload.
+  - **Eventual consistency:** the success signal **plus** a poll-until-consistent read-back (`expect.poll`).
 - **Verification Lane 1 — in-app (`reference.md §5`):** navigate to the app's data explorer or detail view → confirm `{{entity}}` row present; if the app surfaces a server-assigned ID or timestamp field, confirm it is non-null.
 - **Result:** ☐ Pass ☐ Fail — Notes:
 
@@ -92,8 +114,18 @@ C = second environment (staging/preview). See `reference.md §1` for setup steps
 
 <!-- Run this tier in addition to Smoke when the specific feature has changed.
      Never add a TC that can't also be expressed as an automated step.
-     Keep only the sub-parts that exist in this area; state explicit absences for
-     parts that do not exist (e.g. "soft-delete UI absent — entity uses archive flag"). -->
+     Keep only the sub-parts that exist in this area.
+
+     EVERY case below takes the same two mandatory human elements as TC-S1:
+       1. The `> **In plain English:** … / **If this fails:** …` block under the
+          heading — what you're doing, and what a real user loses if it breaks.
+       2. The `In plain English` column on the step table, ALONGSIDE `Expected`
+          (never replacing or softening it — `Expected` is the spec's contract).
+
+     ABSENCES: a sub-part that does not exist in this app is recorded as a single
+     `absent:<reason>` row in the Coverage map — NOT as a case heading whose body
+     explains why it doesn't apply. Delete the heading; the ID retires unused. -->
+
 
 ### TC-{{AREA}}-T1 — required-field validation blocks save
 
@@ -107,11 +139,11 @@ C = second environment (staging/preview). See `reference.md §1` for setup steps
 - **Required fields (derive from source-of-truth):** `{{field1}}`, `{{field2}}`, …
 - **Steps:**
 
-  | # | Action | Target (`role "name"`) | Data | Expected |
-  | --- | --- | --- | --- | --- |
-  | 1 | click | `button "Save"` (empty form) | — | blocked; `alert` or inline message shows `"{{field1}} is required"` (or equivalent); URL unchanged |
-  | 2 | fill | every required field | valid values | — |
-  | 3 | click | `button "Save"` | — | success signal; navigation away from `/new` |
+  | # | Action | Target (`role "name"`) | Data | Expected | In plain English |
+  | --- | --- | --- | --- | --- | --- |
+  | 1 | click | `button "Save"` (empty form) | — | blocked; `alert` or inline message shows `"{{field1}} is required"` (or equivalent); URL unchanged | Try to save an empty form — it refuses and tells you which field is missing. |
+  | 2 | fill | every required field | valid values | — | Now fill in everything that's required. |
+  | 3 | click | `button "Save"` | — | success signal; navigation away from `/new` | It saves and moves you on. |
 
 - **Note:** if the save button is `disabled={!canSave}` until all required fields are valid, assert `toBeDisabled()` at step 1 instead of expecting an alert. See `reference.md §3e`.
 - **Result:** ☐ Pass ☐ Fail — Notes:
@@ -129,10 +161,10 @@ C = second environment (staging/preview). See `reference.md §1` for setup steps
 - **Preconditions:** parent rows exist; navigate to `{{/route}}/new`; all required fields pre-filled with valid values.
 - **Validation rules to cover (derive from source-of-truth):**
 
-  | # | Field | Invalid value | Expected message | Where it surfaces |
-  | --- | --- | --- | --- | --- |
-  | 1 | `{{field}}` | `{{invalid value, e.g. "" / "a" / -1}}` | `"{{expected error message}}"` | `alert` or inline `helperText` — confirm by reading the form source |
-  | 2 | `{{field}}` (cross-field rule) | `{{value that violates the cross-field rule}}` | `"{{message}}"` | — |
+  | # | Field | Invalid value | Expected message | Where it surfaces | In plain English |
+  | --- | --- | --- | --- | --- | --- |
+  | 1 | `{{field}}` | `{{invalid value, e.g. "" / "a" / -1}}` | `"{{expected error message}}"` | `alert` or inline `helperText` — confirm by reading the form source | {{why this value is wrong and what the user should be told}} |
+  | 2 | `{{field}}` (cross-field rule) | `{{value that violates the cross-field rule}}` | `"{{message}}"` | — | {{the rule in one sentence, e.g. "the end date can't be before the start date"}} |
 
 - **Result:** ☐ Pass ☐ Fail — Notes:
 
@@ -149,14 +181,15 @@ C = second environment (staging/preview). See `reference.md §1` for setup steps
 - **Preconditions:** a `{{entity}}` record from TC-{{AREA}}-S1 exists.
 - **Steps:**
 
-  | # | Action | Target (`role "name"`) | Data | Expected |
-  | --- | --- | --- | --- | --- |
-  | 1 | navigate | `{{/route}}` | — | list; find row `"{{example value}} {RUNID}"` |
-  | 2 | click | `button "Edit"` (row action) | — | URL → `{{/route}}/:id/edit`; form pre-populated |
-  | 3 | fill | `textbox "{{field to change}}"` | `{{updated value}}` | value set |
-  | 4 | click | `button "Save"` | — | success signal; detail / list shows updated value |
+  | # | Action | Target (`role "name"`) | Data | Expected | In plain English |
+  | --- | --- | --- | --- | --- | --- |
+  | 1 | navigate | `{{/route}}` | — | list; find row `"{{example value}} {RUNID}"` | Find the record you made earlier. |
+  | 2 | click | `button "Edit"` (row action) | — | URL → `{{/route}}/:id/edit`; form pre-populated | Open it for editing — the form already has its current values. |
+  | 3 | fill | `textbox "{{field to change}}"` | `{{updated value}}` | value set | Change one field. |
+  | 4 | click | `button "Save"` | — | success signal; detail / list shows updated value | Save; the new value is shown. |
 
-- **Sync:** trigger write; observe success signal (`reference.md §3a`).
+- **Write-proof:** whichever row of the S1 architecture list applies (`reference.md §3a`) — for an
+  online-CRUD app that is simply the success signal plus the re-fetch; there is no sync step.
 - **DB verify:** Lane 1 — app detail view shows updated `{{field to change}}` value. [Profile A/C: Lane 2 — query the data store directly.]
 - **Result:** ☐ Pass ☐ Fail — Notes:
 
@@ -174,11 +207,11 @@ C = second environment (staging/preview). See `reference.md §1` for setup steps
 - **Preconditions:** a `{{entity}}` record exists.
 - **Steps:**
 
-  | # | Action | Target (`role "name"`) | Data | Expected |
-  | --- | --- | --- | --- | --- |
-  | 1 | navigate | `{{/route}}` | — | list; row present |
-  | 2 | click | `button "Delete"` (or row-action menu → `menuitem "Delete"`) | — | confirmation dialog appears |
-  | 3 | click | `button "Confirm"` | — | dialog closes; row no longer visible in default list |
+  | # | Action | Target (`role "name"`) | Data | Expected | In plain English |
+  | --- | --- | --- | --- | --- | --- |
+  | 1 | navigate | `{{/route}}` | — | list; row present | Find the record in the list. |
+  | 2 | click | `button "Delete"` (or row-action menu → `menuitem "Delete"`) | — | confirmation dialog appears | Click Delete; you're asked to confirm. |
+  | 3 | click | `button "Confirm"` | — | dialog closes; row no longer visible in default list | Confirm; it disappears from the list. |
 
 <!-- If soft delete: add a step to verify the tombstone flag in Lane 2/3,
      and (if the app has a "show deleted" view) verify the row appears there. -->
@@ -186,7 +219,8 @@ C = second environment (staging/preview). See `reference.md §1` for setup steps
      "No delete UI — {{entity}} records are managed via {{enable/disable/archive}}
      instead. Soft-delete propagation is tested in TC-{{AREA}}-F2." -->
 
-- **Sync:** trigger write; verify the tombstone propagates to the backend.
+- **Write-proof:** the delete's success signal + the row leaving the list. (Offline-first only:
+  also sync and verify the tombstone propagates to the backend — delete this clause otherwise.)
 - **DB verify Lane 1:** row absent from the default list view. [Lane 2/3: `deletedAt` / `isDeleted` flag set on the remote row; row not returned by the default query.]
 - **Result:** ☐ Pass ☐ Fail — Notes:
 
@@ -209,12 +243,12 @@ C = second environment (staging/preview). See `reference.md §1` for setup steps
 - **Preconditions:** parent rows exist; navigate to `{{/route}}/new`.
 - **Steps:**
 
-  | # | Action | Target (`role "name"`) | Data | Expected |
-  | --- | --- | --- | --- | --- |
-  | 1 | click | `combobox "{{Field label}}"` | — | listbox opens; options match canonical enum values: `{{A, B, C}}` |
-  | 2 | click | `option "{{option label}}"` | — | combobox shows selected label |
-  | 3 | fill required fields | — | valid values | — |
-  | 4 | click | `button "Save"` | — | success signal |
+  | # | Action | Target (`role "name"`) | Data | Expected | In plain English |
+  | --- | --- | --- | --- | --- | --- |
+  | 1 | click | `combobox "{{Field label}}"` | — | listbox opens; options match canonical enum values: `{{A, B, C}}` | Open the dropdown — the choices offered are exactly the ones expected, no more and no fewer. |
+  | 2 | click | `option "{{option label}}"` | — | combobox shows selected label | Pick one; it shows as selected. |
+  | 3 | fill required fields | — | valid values | — | Fill in whatever else is required. |
+  | 4 | click | `button "Save"` | — | success signal | Save; you get a confirmation. |
 
 - **DB verify:** Lane 1 — detail view shows `"{{option label}}"`. [Lane 2/3: column stores the **code** `{{OPTION_CODE}}`, not the label.]
 - **Result:** ☐ Pass ☐ Fail — Notes:
@@ -230,11 +264,11 @@ C = second environment (staging/preview). See `reference.md §1` for setup steps
 - **Preconditions:** at least two `{{entity}}` records exist with different `{{filterable field}}` values.
 - **Steps:**
 
-  | # | Action | Target (`role "name"`) | Data | Expected |
-  | --- | --- | --- | --- | --- |
-  | 1 | goto | `{{/route}}` | — | list shows both records |
-  | 2 | fill | `textbox "Search"` (or select filter combobox `"{{filter label}}"`) | `{{value that matches only one record}}` | list narrows to the matching record only |
-  | 3 | clear | the search / reset filter | — | both records visible again |
+  | # | Action | Target (`role "name"`) | Data | Expected | In plain English |
+  | --- | --- | --- | --- | --- | --- |
+  | 1 | goto | `{{/route}}` | — | list shows both records | Open the list; both records are there. |
+  | 2 | fill | `textbox "Search"` (or select filter combobox `"{{filter label}}"`) | `{{value that matches only one record}}` | list narrows to the matching record only | Search for something only one of them matches — only that one is left. |
+  | 3 | clear | the search / reset filter | — | both records visible again | Clear the search; both come back. |
 
 - **Result:** ☐ Pass ☐ Fail — Notes:
 
@@ -242,9 +276,18 @@ C = second environment (staging/preview). See `reference.md §1` for setup steps
 
 ## Tier: Full (exhaustive — pre-release or pre-merge for this area)
 
-Includes everything in Smoke + Targeted, plus the cases below. The every-field
-both-ends round-trip (F1) and conflict + soft-delete propagation (F2) are
-mandatory. See `reference.md §3` and `reference.md §4` for the full recipes.
+Includes everything in Smoke + Targeted, plus the cases below.
+
+- **F1 (every-field both-ends round-trip) is mandatory** wherever the area
+  persists user input. If it persists none — a read-only screen, a list, a
+  session — there is nothing to round-trip: **delete F1** and record it as a
+  `roundtrip:*` row in the Coverage map with the reason. Keep the ID only if it
+  holds a real test, and retitle it to what that test actually checks.
+- **F2 is architecture-selected, not fixed** (Phase 1). Write the variant that
+  matches this app and delete the rest; if the area has no concurrency surface,
+  delete the case and record it once in the Coverage map.
+
+See `reference.md §3` and `reference.md §4` for the full recipes.
 
 ---
 
@@ -257,23 +300,32 @@ mandatory. See `reference.md §3` and `reference.md §4` for the full recipes.
      does not render are "not rendered" entries in the Coverage map, not test steps.
      See reference.md §3d for the full recipe and type-mapping rules. -->
 
+> **In plain English:** fill in **every** box on the form with a different value,
+> then check each one saved correctly *and* comes back correctly when you reopen it.
+> **If this fails:** one field silently doesn't save, or two get swapped — the kind
+> of data loss nobody notices until it matters.
+
 - **Tier:** Full
-- **Preconditions:** parent rows exist; write/download capable (sync configured).
+- **Preconditions:** parent rows exist; the app can write and read back.
 - **Every user-input field (derive from source-of-truth — list all):**
   `{{field1}}`, `{{field2}}`, `{{dateField}}`, `{{enumField}}`, `{{numericField}}`, …
 
 **Step A — Fill every field and write:**
 
-  | # | Action | Target (`role "name"`) | Data (distinct value per field) | Expected |
-  | --- | --- | --- | --- | --- |
-  | 1 | goto | `{{/route}}/new` | — | empty form |
-  | 2 | fill | `textbox "{{field1}}"` | `"{{unique text A}} {RUNID}"` | value set |
-  | 3 | fill / click | `{{date control "{{dateField}}"}}`  | `{{yyyy-MM-dd}}` | date shown |
-  | 4 | click | `combobox "{{enumField}}"` → `option "{{label}}"` | — | label shown |
-  | 5 | fill | `spinbutton "{{numericField}}"` | `{{distinct number, e.g. 42.5}}` | value set |
-  | … | fill remaining fields | every user-input field | distinct values | values set |
-  | N | click | `button "Save"` | — | success signal |
-  | N+1 | trigger write | sync / inline save | — | write success signal |
+  | # | Action | Target (`role "name"`) | Data (distinct value per field) | Expected | In plain English |
+  | --- | --- | --- | --- | --- | --- |
+  | 1 | goto | `{{/route}}/new` | — | empty form | Open a blank create form. |
+  | 2 | fill | `textbox "{{field1}}"` | `"{{unique text A}} {RUNID}"` | value set | Type a distinct value — give every field a *different* one so a swapped column shows up. |
+  | 3 | fill / click | `{{date control "{{dateField}}"}}`  | `{{yyyy-MM-dd}}` | date shown | Pick a date. |
+  | 4 | click | `combobox "{{enumField}}"` → `option "{{label}}"` | — | label shown | Choose an option from the dropdown. |
+  | 5 | fill | `spinbutton "{{numericField}}"` | `{{distinct number, e.g. 42.5}}` | value set | Enter a number. |
+  | … | fill remaining fields | every user-input field | distinct values | values set | Fill in **everything else on the form** — no field left blank. |
+  | N | click | `button "Save"` | — | success signal | Save; you get a confirmation. |
+
+  <!-- Offline-first / sync ONLY: add a final row that triggers the write
+       (`| N+1 | trigger write | sync | — | write success signal | Sync it to the server. |`).
+       Online-CRUD apps: the save IS the write — do not add it. -->
+
 
 **End 1 — data store (after write):**
 Navigate to the app's data explorer or query the data store (Lane 2/3).
@@ -288,10 +340,16 @@ format extraction; numbers come back as numbers; JSON columns need `JSON.parse`.
   | `{{enumColumn}}` | label `"{{label}}"` | code `"{{ENUM_CODE}}"` | enum code |
   | `{{numericColumn}}` | `42.5` | `42.5` | number |
 
-**Step B — Reset local state and download:**
-Use the app's data-clear action (or harness `resetLocalAndRelogin`) to wipe
-local state while the remote row remains. Trigger a sync / page refresh to
-pull from the server (`reference.md §3b`).
+**Step B — Discard what the client is holding, then read back from the server:**
+The point is to prove the **pull** path, so the read-back must not be served from
+anything the write left in memory (`reference.md §3b`).
+
+- **Online CRUD:** reload the page (or navigate away and back) so the client
+  re-fetches, then reopen the record. There is no local store to clear.
+- **Offline-first / sync:** use the app's data-clear action (or harness
+  `resetLocalAndRelogin`) to wipe local state while the remote row remains, then
+  trigger a sync to pull server state into the empty local store.
+- **Eventual consistency:** reload, then poll until the read model catches up.
 
 **End 2 — form (after download):**
 Navigate to `{{/route}}/:id/edit`. Assert every field shows what was entered.
@@ -307,33 +365,54 @@ Navigate to `{{/route}}/:id/edit`. Assert every field shows what was entered.
 
 ---
 
-### TC-{{AREA}}-F2 — sync conflict + soft-delete propagation
+### TC-{{AREA}}-F2 — concurrency & durability (**architecture-selected — see Phase 1**)
 
-<!-- Requires a second browser profile/context (isolated storage). See reference.md §3c.
-     If this area has no delete UI (entities managed by enable/disable), the
-     soft-delete half is absent — state that explicitly in the steps. -->
+<!-- ############################################################################
+     THIS SLOT IS NOT ONE FIXED CASE. Write the variant matching the app's
+     persistence architecture, and DELETE the others.
+
+     If the app has NO concurrency surface here at all — a singleton row only one
+     role can write, a create-only screen, a caller-scoped personal setting —
+     then DELETE THIS WHOLE CASE. Do not keep it as "Absent — online CRUD".
+     Record it once instead, in the Coverage map:
+
+       | `concurrency:{{entity}}` | absent:<why — e.g. one admin-only row, last-write-wins,
+                                   no offline store, so no sync-conflict or tombstone path> |
+
+     A heading whose body only explains why it doesn't apply is a phantom test.
+     The ID is retired, not reused (reference.md §9).
+     ############################################################################ -->
+
+> **In plain English:** {{what two people doing things at once looks like here}}.
+> **If this fails:** {{whose work gets silently lost or overwritten}}.
 
 - **Tier:** Full
-- **Preconditions:** one `{{entity}}` record `R` exists and has been synced to the server (no pending changes); two profile contexts available.
 
-**Conflict:**
+**Variant A — offline-first / sync** (requires a second browser profile/context with isolated
+storage; see `reference.md §3c`). Preconditions: record `R` exists and is synced (no pending changes).
 
-  | # | Who | Action | Expected |
-  | --- | --- | --- | --- |
-  | 1 | Profile 1 | edit `R`, field `"{{conflict field}}"` → `"P1 {RUNID}"` | NOT synced yet |
-  | 2 | Profile 2 | edit `R`, same field → `"P2 {RUNID}"` | sync → server holds `"P2"` |
-  | 3 | Profile 1 | sync | conflict signal visible (the app's conflict indicator — count badge, log entry, snackbar) |
-  | 4 | both | observe resolution | resolution matches the entity's stated policy (record observed behaviour; if unclear, raise as a finding) |
+  | # | Who | Action | Expected | In plain English |
+  | --- | --- | --- | --- | --- |
+  | 1 | Profile 1 | edit `R`, field `"{{conflict field}}"` → `"P1 {RUNID}"` | NOT synced yet | Change it as person 1, but don't sync. |
+  | 2 | Profile 2 | edit `R`, same field → `"P2 {RUNID}"` | sync → server holds `"P2"` | Person 2 changes the same thing and syncs first. |
+  | 3 | Profile 1 | sync | conflict signal visible (the app's conflict indicator — count badge, log entry, snackbar) | Person 1 syncs and is told there's a clash. |
+  | 4 | both | observe resolution | resolution matches the entity's stated policy (record observed behaviour; if unclear, raise as a finding) | Whoever's version wins, it matches the documented rule. |
+  | 5 | Profile 1 | delete `R`; sync | `R` absent from Profile 1 list; tombstone set on server | Deleting it removes it for person 1 and marks it deleted on the server. |
+  | 6 | Profile 2 | sync / refresh | `R` disappears from Profile 2 list | It disappears for person 2 too. |
 
-**Soft-delete propagation:**
+**Variant B — online CRUD.** There is no sync, local store or tombstone. Test the app's *real*
+contention guard, and only if one exists: a unique-key **409**, an already-actioned **409**, a
+last-write-wins column, an optimistic-concurrency token, or a delete racing a background worker.
+If the guard is already covered by a Targeted/F3 case, **delete this case** and point the
+`concurrency:*` coverage row at that case instead of duplicating it.
 
-  | # | Who | Action | Expected |
-  | --- | --- | --- | --- |
-  | 5 | Profile 1 | delete `R`; sync | `R` absent from Profile 1 list; tombstone set on server |
-  | 6 | Profile 2 | sync / refresh | `R` disappears from Profile 2 list |
+**Variant C — realtime / push.** Concurrency shows up as *convergence*: with two sessions open on
+the same screen, a change made in session 1 must appear in session 2 **without a reload**. Assert
+the second session's UI, not a sync indicator.
 
-<!-- If no delete UI: replace soft-delete steps with:
-     "Soft-delete propagation absent — {{entity}} has no delete UI (see TC-{{AREA}}-T4)." -->
+**Variant D — eventual consistency.** The write succeeds before the read model catches up. Assert
+poll-until-consistent (`expect.poll`) and that the UI shows an honest interim state rather than
+stale data presented as current.
 
 - **Result:** ☐ Pass ☐ Fail — Notes:
 
@@ -352,12 +431,12 @@ Navigate to `{{/route}}/:id/edit`. Assert every field shows what was entered.
 - **Tier:** Full
 - **Cases to cover (add/remove rows as applicable):**
 
-  | # | Scenario | Setup | Action | Expected |
-  | --- | --- | --- | --- | --- |
-  | 1 | {{field}} at maximum length | fill `{{field}}` with `{{maxLength}}` chars | save | saves; no truncation |
-  | 2 | {{field}} exceeds maximum | fill `{{field}}` with `{{maxLength + 1}}` chars | save | blocked with `"{{message}}"` |
-  | 3 | Special chars in `{{field}}` | fill with `O'Brien & Co. <test>` | save + round-trip | stored and displayed verbatim |
-  | 4 | Empty list state | no records in this area | navigate to `{{/route}}` | empty-state message visible; no errors |
+  | # | Scenario | Setup | Action | Expected | In plain English |
+  | --- | --- | --- | --- | --- | --- |
+  | 1 | {{field}} at maximum length | fill `{{field}}` with `{{maxLength}}` chars | save | saves; no truncation | The longest allowed value saves without being silently cut short. |
+  | 2 | {{field}} exceeds maximum | fill `{{field}}` with `{{maxLength + 1}}` chars | save | blocked with `"{{message}}"` | One character too many is refused, with a message saying so. |
+  | 3 | Special chars in `{{field}}` | fill with `O'Brien & Co. <test>` | save + round-trip | stored and displayed verbatim | Apostrophes, ampersands and angle brackets come back exactly as typed. |
+  | 4 | Empty list state | no records in this area | navigate to `{{/route}}` | empty-state message visible; no errors | A brand-new, empty area shows a friendly message rather than a broken page. |
 
 - **Result:** ☐ Pass ☐ Fail — Notes:
 

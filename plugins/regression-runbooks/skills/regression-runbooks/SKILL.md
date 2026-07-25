@@ -39,6 +39,23 @@ API read-back, browser storage — at least one lane must be automatable); how t
 drive auth/login and reset state; the area inventory (all routes/nav); selector
 conventions. See `template-profile.md` for the skeleton.
 
+**Detect the app's persistence architecture first — it selects which parts of
+the template apply.** This template was first written for an offline-first app,
+so several of its mechanics (sync buttons, dirty/unsynced badges, local stores,
+two-profile conflict, tombstone propagation) exist **only** for that
+architecture. Pick one and record it in the profile:
+
+| Architecture | How a write reaches the server | Write-proof is | Delete from the template |
+|---|---|---|---|
+| **Online CRUD** (request → server → response, no local store) | immediately, on submit | the server's success signal + a read-back of the real row | sync trigger, dirty/unsynced badge, local-state reset, two-profile sync conflict, tombstone propagation |
+| **Offline-first / sync** (local store + sync engine) | on an explicit sync or background flush | pending badge → sync → badge clears | — (all of it applies as written) |
+| **Realtime / push** (server pushes to connected clients) | immediately; peers converge via push | success signal + a **second session converging without a reload** | sync trigger, dirty badge, conflict-on-sync |
+| **Eventual consistency** (queue/worker/projection behind the write) | immediately, but the read model lags | success signal + poll-until-consistent (`expect.poll`) | sync trigger, dirty badge |
+
+Then apply the **architecture-fit rule** (Non-negotiables): a mechanic the app
+does not have is **deleted** from the runbook, not carried as an "absent"
+placeholder case.
+
 ### Phase 2 — Discover (exhaustive, parallel)
 
 For the target area, fan out parallel `Explore` agents (and codebase search
@@ -101,6 +118,29 @@ regressions — and the skill compounds so each area is cheaper than the last.
 - **Tri-purpose:** a case that can't be run by a human on a second environment
   *and* expressed as an e2e step is incomplete. Use `getByRole(role, { name })`
   targets; flag missing accessible names as testability gaps.
+- **Fit the architecture — delete what the app cannot have.** This template
+  originated in an offline-first app; its sync/dirty-badge/local-store/
+  two-profile-conflict/tombstone mechanics apply **only** to that architecture
+  (Phase 1 table). When the app doesn't have a mechanic, **delete the section**.
+  Never keep it as an "Absent — not applicable" placeholder case: a `### TC-…`
+  heading whose entire body explains why it doesn't apply is a phantom test that
+  inflates the case count and gets re-read and re-skipped on every pass. Record
+  the absence **once**, as a row in the **Coverage map** (`absent:<reason>`) —
+  that is what the Phase 4 reconciliation gate reads. Where the app has a
+  *different* real behaviour in that slot (a duplicate-key 409, two users racing
+  a decision, a second session converging by push), point the coverage row at
+  the case that already covers it instead of inventing a new one. Retired IDs
+  are never reused or renumbered — the numbering just skips them.
+- **Plain language is mandatory — a non-technical tester must be able to run
+  it.** Purpose #1 and #3 are *humans*, and a wall of `getByRole` is unreadable
+  to them. Every case opens with a two-line plain-English block (what you're
+  doing; what breaks for a real user if it fails), and every step table carries
+  an **`In plain English`** column alongside `Expected`. **Add the column — never
+  reword `Expected`:** `Expected` is the exact contract the spec is generated
+  from (element roles, DB columns, error strings, `exact:` notes), and loosening
+  it to read nicely silently weakens the automated test. The two columns say the
+  same thing at two levels of precision. Put the shared legend (columns, verbs,
+  Lanes, personas, `{RUNID}`) once in the runbooks README and link it.
 - **Persistence is part of every mutation case** — not a separate afterthought.
   Upload/write proof minimum; read-back + conflict proof in the Full tier.
 - **The Full tier carries the every-field both-ends round-trip** (fill every
@@ -132,8 +172,9 @@ regressions — and the skill compounds so each area is cheaper than the last.
 |---|---|
 | Execution profiles (local / automated / second-env) | `reference.md` §1 |
 | Area inventory + routes/tables (this repo's discovered profile) | `.claude/regression-runbooks/profile.md` |
-| Sync / persistence mechanics | `reference.md` §2 |
-| Upload / download / conflict recipes | `reference.md` §3 |
+| **Persistence architecture → which sections apply** | this file, Phase 1 · `reference.md` §2 preamble · repo profile §1a |
+| Persistence mechanics (per architecture) | `reference.md` §2 |
+| Upload / read-back / concurrency recipes | `reference.md` §3 |
 | Every-field both-ends round-trip | `reference.md` §4 |
 | Per-field validation | `reference.md` §4 |
 | Verification lanes + type mappings | `reference.md` §5 |
@@ -166,6 +207,23 @@ regressions — and the skill compounds so each area is cheaper than the last.
   its own suite can still silently drop whole field groups, derived-UI,
   conditional-display flows, and exact validation strings that the older doc
   guaranteed. Diff and slot every concrete behaviour.
+- **Carrying template scaffolding the app cannot have** — the commonest failure
+  of this skill. Symptom: every runbook in the repo has the same `F2 — sync
+  conflict + soft-delete propagation` heading whose body says "Absent, this app
+  is online CRUD". Thirteen files each apologising for the same missing feature
+  is thirteen copies of a maintenance burden and zero test coverage. Detect it
+  with `grep -rn "Absent" docs/runbooks/` — every hit that is a **case heading**
+  rather than a coverage-map row is one of these.
+- **Writing runbooks only a developer can read** — if a case's only description
+  of intent is its `getByRole` steps, the manual profiles (purposes #1 and #3)
+  can't actually be run by the tester they were written for.
+- **Rewording `Expected` to make it friendlier** — that column is the spec's
+  contract. Add the plain-English column beside it; never soften it.
+- **Letting per-runbook automation notes drift from reality** — a trailing
+  "pending the first green harness run" that survives three green runs makes the
+  whole file untrustworthy. Worse, it can contradict the same file's own Run
+  record a few lines above. Re-derive these notes from the specs (which TC IDs
+  do they actually reference?) rather than editing them by hand.
 - Not feeding run learnings back into the skill — each run's generalizable
   gotchas go into `reference.md` (and `~/.claude/regression-runbooks/lessons.md`)
   so the next area and the next repo benefit.
