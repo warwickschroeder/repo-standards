@@ -124,6 +124,15 @@ Three lines. Title, action, Expect.
 - **Action** — a click path (`**A › B** → **C**`) or a command. Exact control names. No prose around it.
 - **Expect** — the one observable outcome. Quote exact error strings; name the column if the check is in the database.
 
+### Commands are one line
+
+A tester selects a command and pastes it. Anything that needs assembling first is a step they get wrong, and a line that only runs in the shell *you* had is a step they can't run at all.
+
+- **One line, always.** No `\` continuations, no heredocs, no `for … ; do … ; done` spanning lines. A very long line is fine — the fenced block scrolls, and it pastes as one thing. Several *independent* commands may share a block, one per line, each runnable on its own.
+- **Write for the shell the profile names**, not the one you happen to be in. `\` continuations, `$(…)` substitution, `/dev/null` and `seq` are POSIX idioms that fail in PowerShell and CMD. For PowerShell that means `NUL` not `/dev/null`, `1..70 | ForEach-Object { … }` not `for i in $(seq 1 70)`, and **`curl.exe`, never bare `curl`** — in Windows PowerShell 5.1 `curl` is an alias for `Invoke-WebRequest`, which takes entirely different flags and fails confusingly.
+- **A JSON body inline is a trap on Windows.** PowerShell's quoting of native-command arguments differs between 5.1 and 7, so a `-d "{\"a\":1}"` may reach the exe with its quotes already eaten. Build the body and write it to a file in the same line, then pass `-d "@body.json"` — that behaves the same everywhere.
+- **SQL: one statement per line.** A block of several statements is fine; a single statement wrapped across lines is not.
+
 ### Good vs. bad
 
 | Bad | Why | Good |
@@ -160,9 +169,7 @@ Three recurring cases. All are legitimate; inventing a screen instead is not.
 **Something one session can't produce.** A concurrent race, a row that predates the change, an identity the persona roster doesn't offer, a file that has become unreadable. Drive it with an out-of-band database write or a raw API call carrying whatever the repo's test-auth mechanism uses. Example — forcing a read failure without touching storage:
 
 ```sql
-UPDATE search."Documents"
-   SET "SourceBlobPath" = 'missing/nothing.txt', "ContentIndexedAt" = NULL
- WHERE "FileName" = '<your file>';
+UPDATE search."Documents" SET "SourceBlobPath" = 'missing/nothing.txt', "ContentIndexedAt" = NULL WHERE "FileName" = '<your file>';
 ```
 
 **One app instance, one signed-in session** stays the rule. Never a second browser, profile, device or tab. A scenario that genuinely needs two live sessions — a true concurrency race — is a signal to cover it with an integration test: say so rather than writing a step nobody can run.

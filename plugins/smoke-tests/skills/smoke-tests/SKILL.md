@@ -95,6 +95,7 @@ Then read it as the tester: **could someone who has never seen this change follo
 
 - **Only on request.** Never write one because a change felt significant. Offer; let the user decide.
 - **Every step has an `**Expect:**`.** A step with no stated pass condition is not a test.
+- **Every command is one line, in the tester's shell.** No `\` continuations, no heredocs, no multi-line blocks — the tester pastes, they don't assemble. The profile names the shell; write for it, and don't leave bash idioms (`$(…)`, `/dev/null`, bare `curl`) in a script a Windows tester will run in PowerShell.
 - **Short.** Title, action, Expect. No walls of text. Cut rationale unless it changes what you do.
 - **Verified, not remembered.** Names of controls, routes and error strings come from the source, checked while writing.
 - **One app instance, one signed-in session.** Never a second user, device, browser profile or tab. Anything a single session can't produce — a concurrent race, a row that predates the change, an identity the persona roster doesn't offer — is driven by an out-of-band database write or an API call. A scenario that genuinely needs two live sessions is a signal to cover it with an integration test instead: **say so** rather than writing an unrunnable step.

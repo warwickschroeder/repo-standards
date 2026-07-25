@@ -7,6 +7,7 @@ Full rules: the smoke-tests SKILL.md. The short version:
 - A case a tester should run forever goes in the runbook, not here. This file is only the delta.
 - Short. A step is: title, action, Expect. No background, no "why this bug existed", no walls of text.
 - Every step has an **Expect:** line.
+- Every command is ONE line, in the shell the profile names. No `\` continuations, no heredocs. On Windows that means PowerShell: `curl.exe` not `curl`, `NUL` not `/dev/null`.
 - Full width — never hard-wrap prose. Code in a fenced block wraps however it reads best.
 - Name controls and routes exactly as they exist — check, don't remember. No UI? Say so and give the curl/SQL.
 - One app instance, one session. Simulate the rest out of band.

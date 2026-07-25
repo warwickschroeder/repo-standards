@@ -19,6 +19,7 @@ only adds what is release- and deploy-specific.
 | Start the app | <the command> |
 | URL | <the app's local URL — the exact port, from its source of truth, not from memory> |
 | Prerequisites | <Docker, a database, a container runtime, a seeded volume> |
+| Shell | <the shell a tester pastes commands into — PowerShell, CMD, bash. Every command in a smoke test is written as one line for **this** shell.> |
 | Sign in | <dev auth? a seeded account? a real identity provider?> |
 | Switch roles | <the in-app persona switcher, or "sign out and back in as …"> |
 | Personas available | <name → role, and which one each kind of step needs> |
