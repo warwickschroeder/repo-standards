@@ -1,6 +1,6 @@
 ---
 name: smoke-tests
-description: Use when asked to write a smoke test — a short, plain-language script a human runs by hand to prove a change works, either for one change or for everything since the last release so a tester can target only what changed. Scopes from the diff, cites the repo's regression runbooks instead of restating them, and flags cases that belong in a runbook permanently.
+description: Use when asked to write a smoke test — a short, plain-language script a human runs by hand to prove a change works, either for one change or for everything since the last release so a tester can target only what changed. Scopes from the diff, inlines the steps from the repo's regression runbooks so the tester never navigates away, and flags cases that belong in a runbook permanently.
 ---
 
 # Smoke Tests
@@ -51,14 +51,14 @@ Filter to product code. A test-only or docs-only commit changes nothing a tester
 
 **A migration that can fail on existing data is step 1, always**, with the pre-flight query that proves it won't. If migrations run at app startup, a failing one doesn't degrade the app — it stops it booting.
 
-### Phase 3 — Read the runbooks
+### Phase 3 — Read the runbooks, then inline what you need
 
 Open the runbooks covering every surface the change touches, **before writing a step**. Then work in both directions:
 
-- **Copy down.** Where a case already walks the journey, reuse its personas, controls, lanes and wording, and **cite it** (`(follows TC-DEL-S1)`, `(extends TC-LIB-T3)`) rather than paraphrasing. A smoke step describing the same journey in different words is how the two drift apart.
-- **Push back up.** Where the change means a runbook is now missing a case a tester should run **forever** — not once for this release — flag it inline as a *Runbook gap* and offer to write it. The runbook is the permanent record. If the repo keeps runbook cases 1:1 with e2e specs, a new case ships with its spec test.
+- **Copy the steps down, literally.** Where a case already walks the journey, take its actions, personas, controls and expected results **into the smoke test**, and mark the source as provenance (`*(from TC-DEL-S1)*`) so the two can be kept in sync. The case ID is a footnote, never the instruction: "Run `TC-DEL-S1` end to end" is not a step, it is a redirection. Copy the click path and the observable outcome; leave the selector tables, verification lanes and pass/fail boxes where they are.
+- **Push back up.** Where the change means a runbook is now missing a case a tester should run **forever** — not once for this release — flag it inline as a *Runbook gap* and offer to write it. The runbook is still the permanent record. If the repo keeps runbook cases 1:1 with e2e specs, a new case ships with its spec test.
 
-A release smoke test whose steps are all novel is a smell: either the runbooks are thin, or the steps are restating coverage that already exists.
+A release smoke test whose steps are all novel is a smell: either the runbooks are thin, or nobody read them.
 
 ### Phase 4 — Verify every fact
 
@@ -67,6 +67,7 @@ Every control, route, field, error string, constant and limit is **read from sou
 Note as you go:
 
 - A **server guard above the client's own limit** (a cap the textarea already enforces) is unreachable in the browser — give the curl.
+- **A control the step's own setup disables.** Read the `disabled` condition, not just the label: a step that creates pending work and then says "press Run now" is unrunnable if the button greys out *while work is pending*. Check the state your earlier lines put the screen in, then give the API call instead.
 - A surface with **no UI at all** gets the SQL or API path, not an invented screen.
 - Something **local dev cannot prove** (headers only applied by the production server, a policy only real TLS activates) is marked as a second-environment step, not silently asserted.
 
@@ -100,7 +101,7 @@ Then read it as the tester: **could someone who has never seen this change follo
 - **Verified, not remembered.** Names of controls, routes and error strings come from the source, checked while writing.
 - **One app instance, one signed-in session.** Never a second user, device, browser profile or tab. Anything a single session can't produce — a concurrent race, a row that predates the change, an identity the persona roster doesn't offer — is driven by an out-of-band database write or an API call. A scenario that genuinely needs two live sessions is a signal to cover it with an integration test instead: **say so** rather than writing an unrunnable step.
 - **Be honest about what can't be tested by hand.** A truncation notice needing 200+ rows, a race needing real concurrency: mark it *Not testable by hand*, name what covers it, and move on. Silently omitting it reads as "covered".
-- **The runbook is the permanent record; this is the delta.** Cite cases, don't restate them. Permanent behaviour goes in the runbook.
+- **Self-contained — the tester never navigates away.** Every step is followable from this file alone, with the click path written out. A runbook case ID may ride along as provenance, but a reader who never opens it must still be able to run everything. Permanent behaviour still belongs in the runbook — that governs where the *case* lives, not whether the tester has to go and find it.
 - **Full width — never hard-wrap prose.** Code inside a fenced block wraps however it reads best.
 
 ## Quick reference
@@ -111,7 +112,7 @@ Then read it as the tester: **could someone who has never seen this change follo
 | Per-repo profile skeleton | `template-profile.md` |
 | Scoping a release from the diff | `reference.md` §1 |
 | *What changed* — the summary list and the risk table, row by row | `reference.md` §2 |
-| Runbook interplay — cite vs. push back | `reference.md` §3 |
+| Runbook interplay — inline the steps vs. push back | `reference.md` §3 |
 | Writing a step (worked examples, good vs. bad) | `reference.md` §4 |
 | Reaching what the UI can't (curl, SQL, test-auth headers) | `reference.md` §5 |
 | Format gates | `reference.md` §6 |
@@ -121,8 +122,9 @@ Then read it as the tester: **could someone who has never seen this change follo
 - **Writing one nobody asked for.** The first and most common failure.
 - **Writing *What changed* as a paragraph** when it is a list of four changes — the reader can't find their own area in it.
 - **Scoping from commit subjects** instead of the diff — misses contract changes with no commit of their own, and pads the script with test-only churn.
-- **Restating a runbook case in different words** instead of citing it, so the two drift.
+- **Telling the tester to "run TC-XXX"** instead of writing the steps out — every redirection is a place the run stalls, and they come back unsure what they were proving.
 - **Burying the pass condition** inside a paragraph of rationale — the format's whole point is that a tester can skim to the bold **Expect:**.
 - **Inventing a screen** for a surface that has none, or quoting a control label from memory.
+- **Referencing a fixture the step never creates** — `-F "files=@some.txt"` is curl error 26 for every tester whose working directory doesn't happen to contain it.
 - **Silently dropping what can't be tested by hand** rather than naming it and what covers it.
 - **Treating a migration as ordinary.** If migrations run at startup, a bad one is a boot failure, not a bug — pre-flight it as step 1.

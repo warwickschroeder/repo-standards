@@ -3,7 +3,7 @@ Copy to <smoke-test-dir>/YYYY-MM-DD-<topic>-smoke-test.md. Delete this comment a
 
 Full rules: the smoke-tests SKILL.md. The short version:
 
-- Read the covering runbooks first. Reuse their controls, personas and wording; cite a case (`TC-DEL-S1`) instead of rewriting it.
+- Read the covering runbooks first, then COPY the steps in. Reuse their controls, personas and wording; mark the source `*(from TC-DEL-S1)*`. Never "run TC-DEL-S1" — the tester must never open another document.
 - A case a tester should run forever goes in the runbook, not here. This file is only the delta.
 - Short. A step is: title, action, Expect. No background, no "why this bug existed", no walls of text.
 - Every step has an **Expect:** line.
@@ -50,9 +50,9 @@ Full rules: the smoke-tests SKILL.md. The short version:
 
 ## Steps
 
-<One step per thing you're proving. Title, action, Expect — nothing else. Cite a runbook case where one already walks the journey. If a migration can fail on existing data, it is step 1, with its pre-flight query.>
+<One step per thing you're proving. Title, action, Expect — nothing else. Where a runbook case already walks the journey, copy its click path in and mark it `*(from TC-…)*`. If a migration can fail on existing data, it is step 1, with its pre-flight query.>
 
-1. **<What this proves.>** <(follows `TC-…`) if a runbook case already covers the journey>
+1. **<What this proves.>** <*(from `TC-…`)* if the click path below came from a runbook case>
    <The action — exact control, route, field. Or the command.>
    **Expect:** <the one observable outcome that means it worked>
 

@@ -38,7 +38,7 @@ The class that gets missed is **contract**. A response that changed from an arra
 
 ### Dependency upgrades
 
-A framework major (a router, a UI library, a test runner) rarely gets its own step, but it decides **which existing journeys are worth re-walking**. A router upgrade means sign-in, sign-out, redirects and guards; a UI-library major means the controls it renders. Cite the runbook cases that already cover those and say why they are in scope.
+A framework major (a router, a UI library, a test runner) rarely gets its own step, but it decides **which existing journeys are worth re-walking**. A router upgrade means sign-in, sign-out, redirects and guards; a UI-library major means the controls it renders. Copy in the click paths from the runbook cases that already cover those, and say why they are in scope.
 
 ---
 
@@ -80,19 +80,28 @@ Six rows. Each answers one question a person deploying this needs answered.
 
 If the repo has regression runbooks (see the `regression-runbooks` plugin), they are the **standing** coverage and the smoke test is the **delta**. Getting this boundary right is most of what makes a smoke test short.
 
-### Cite, don't restate
+### Inline the steps — never send the tester away
 
-Where a runbook case already walks the journey:
+Where a runbook case already walks the journey, **copy its actions into the smoke test**. Name the case as provenance so the two can be kept in sync, but the ID is a footnote, not the instruction:
 
 ```markdown
-14. **The reshaped responses didn't break the ordinary path.** (follows `TC-DEL-S1`, `TC-DEL-T3`)
-    Run `TC-DEL-S1` end to end, then a bulk restore (`TC-DEL-T3`).
-    **Expect:** both behave exactly as their runbooks say. The response shape changed this release, so a clean runbook pass **is** the test.
+14. **The reshaped responses didn't break the ordinary path.** *(from `TC-DEL-S1`, `TC-DEL-T3`)*
+    Upload a file → **Library** → open it → **Delete** → confirm **Delete document** → **Deleted documents**: it is listed → **Restore** → **Library**: it is back.
+    Then delete two more, tick both on **Deleted documents**, and use the selection bar's **Restore**.
+    **Expect:** the row leaves and returns each time; the bar reads "2 documents selected" and both come back. Both responses changed shape this release, so a clean pass here **is** the test.
 ```
 
-Three words — "follows `TC-DEL-S1`" — replace a paragraph, and the tester recognises what they are being asked to do. Restating the journey in your own words creates a second description of the same thing that drifts the moment either changes.
+Not this:
 
-Use `(follows …)` when the step *is* that case, and `(extends …)` when it adds a new assertion to it.
+```markdown
+    Run `TC-DEL-S1` end to end, then a bulk restore (`TC-DEL-T3`).      ← a redirection, not a step
+```
+
+A step that names a case instead of an action costs the tester the thing the format exists to protect: they lose their place, open a second document written for a different audience, read past selector tables and pass/fail boxes meant for someone else, and come back unsure what they were proving. The smoke test is **self-contained** — a tester who never opens a runbook can still run every step in it.
+
+**Copy the run, not the apparatus.** A runbook case carries selectors, verification lanes, automation pointers, "in plain English" glosses and result boxes. Take the click path and the observable outcome; leave the rest behind. A seven-row case usually inlines to one or two lines.
+
+The cost is a second copy of the journey that can drift from the runbook's. That is accepted deliberately: the case ID in the step is what makes the drift findable, and a smoke test is read once and then it is history — the runbook is what has to stay right.
 
 ### Push permanent behaviour back up
 
@@ -106,7 +115,7 @@ Then offer to write the case. If the repo keeps runbook cases 1:1 with e2e specs
 
 ### The smell
 
-A release smoke test whose steps are **all** novel means one of two things: the runbooks are thin (so the gaps list should be long), or the steps are restating coverage that already exists (so they should be citations). Neither is a script that stays short.
+A release smoke test whose steps are **all** novel means one of two things: the runbooks are thin (so the gaps list should be long), or nobody read them (so the steps are inventing wording for journeys that already have some). Either way the wording drifts from what the standing coverage says, and the two descriptions of the same click path start disagreeing.
 
 ---
 
@@ -115,13 +124,13 @@ A release smoke test whose steps are **all** novel means one of two things: the 
 Three lines. Title, action, Expect.
 
 ```markdown
-9. **An over-long project tag is refused.** (extends `TC-TAG-T2`)
+9. **An over-long project tag is refused.**
    **Admin › Project tags** → paste 101 characters into **New tag name** → **Add tag**.
    **Expect:** `name must be at most 100 characters.` No tag created. 100 characters still works.
 ```
 
 - **Title** — what it *proves*, in plain words. Not "test the tag cap"; a claim that can be true or false.
-- **Action** — a click path (`**A › B** → **C**`) or a command. Exact control names. No prose around it.
+- **Action** — a click path (`**A › B** → **C**`) or a command, written out in full. Exact control names. No prose around it, and **never a pointer to a case in another document** — if a runbook already walks it, copy the path in (§3).
 - **Expect** — the one observable outcome. Quote exact error strings; name the column if the check is in the database.
 
 ### Commands are one line
@@ -131,6 +140,7 @@ A tester selects a command and pastes it. Anything that needs assembling first i
 - **One line, always.** No `\` continuations, no heredocs, no `for … ; do … ; done` spanning lines. A very long line is fine — the fenced block scrolls, and it pastes as one thing. Several *independent* commands may share a block, one per line, each runnable on its own.
 - **Write for the shell the profile names**, not the one you happen to be in. `\` continuations, `$(…)` substitution, `/dev/null` and `seq` are POSIX idioms that fail in PowerShell and CMD. For PowerShell that means `NUL` not `/dev/null`, `1..70 | ForEach-Object { … }` not `for i in $(seq 1 70)`, and **`curl.exe`, never bare `curl`** — in Windows PowerShell 5.1 `curl` is an alias for `Invoke-WebRequest`, which takes entirely different flags and fails confusingly.
 - **A JSON body inline is a trap on Windows.** PowerShell's quoting of native-command arguments differs between 5.1 and 7, so a `-d "{\"a\":1}"` may reach the exe with its quotes already eaten. Build the body and write it to a file in the same line, then pass `-d "@body.json"` — that behaves the same everywhere.
+- **A command that reads a local file creates it first.** `-F "files=@sample.txt"` and `-d "@body.json"` die with curl's unhelpful *"(26) Failed to open/read local data from file/application"* the moment the tester's working directory doesn't hold that file. Produce the fixture on the line above. A placeholder is only right for something the tester genuinely already has — and then name it as one (`@<a document you uploaded earlier>`), so nobody pastes it verbatim.
 - **SQL: one statement per line.** A block of several statements is fine; a single statement wrapped across lines is not.
 
 ### Good vs. bad
@@ -140,6 +150,8 @@ A tester selects a command and pastes it. Anything that needs assembling first i
 | "Check that validation works" | no pass condition | "**Expect:** `name must be at most 100 characters.` No tag created." |
 | "This was a bug because the endpoint never trimmed…" | rationale, not instruction | delete it; it belongs in the PR |
 | "Click the Sync button" | invented from memory | read the component; it may be an icon button with a state-dependent tooltip |
+| "Run `TC-DEL-S1` end to end" | sends the tester to another document | write the click path out; keep `*(from TC-DEL-S1)*` as provenance |
+| "Press **Run now** three times" | the step's own setup greys the button out | read the `disabled` condition; drive it from the API instead |
 | "Verify the list is correct" | unfalsifiable | name the row, the count, or the column value |
 
 ### When it can't be tested by hand
