@@ -6,6 +6,13 @@
   },
   "plugins": [
     {
+      "name": "app-documentation",
+      "source": "./plugins/app-documentation",
+      "description": "Document how an application works — a grounded technical reference doc per part of the system, then end-user and operator guides derived from them and verified against the real UI. Audits existing docs for drift.",
+      "category": "documentation",
+      "keywords": ["documentation", "user-guide", "onboarding", "architecture", "reference", "diataxis"]
+    },
+    {
       "name": "regression-runbooks",
       "source": "./plugins/regression-runbooks",
       "description": "Exhaustively explore any web-app area and write tiered regression runbooks (manual + automated), self-improving after every run.",

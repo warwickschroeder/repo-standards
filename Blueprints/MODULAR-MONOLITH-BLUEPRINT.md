@@ -41,6 +41,7 @@
 > [Rules Digest](#1-rules-digest-read-first) is the contract — an agent must
 > re-read it before every change and must not violate it (in an existing app,
 > the contract is the digest **as scoped by the §16 adoption decisions**).
+> **Two practices are deliberately optional** — end-user guides and hand-run smoke tests ([§17](#17-optional-practices--offer-them-dont-assume-them)): offer each at the point noted, record the answer, and never produce their artifacts unasked.
 >
 > **This blueprint expects a design-first workflow.** The visual/UX design is
 > produced **upstream in Claude Design** (Anthropic's prompt-to-prototype tool)
@@ -75,7 +76,8 @@
 [13 Cross-cutting conventions](#13-cross-cutting-conventions) ·
 [14 Build Order](#14-build-order-phased) ·
 [15 Definition of Done](#15-definition-of-done-per-change) ·
-[16 Aligning an existing project](#16-aligning-an-existing-project-selective-adoption)
+[16 Aligning an existing project](#16-aligning-an-existing-project-selective-adoption) ·
+[17 Optional practices (offer)](#17-optional-practices--offer-them-dont-assume-them)
 
 ---
 
@@ -370,6 +372,8 @@ DESIGN.md                           # OPTIONAL derived design summary (§11); no
 CLAUDE.md / AGENTS.md               # agent operating instructions — distilled from this blueprint,
                                     #   updated in the same change when a distilled rule changes (§13)
 .claude/regression-runbooks/profile.md  # repo test-harness profile the regression runbooks read (§12.9)
+.claude/app-documentation/profile.md    # OPTIONAL (§17.1) — what a "part" is here, doc paths, the role model
+.claude/smoke-tests/profile.md          # OPTIONAL (§17.2) — how the app runs, how to sign in, release tagging
 docs/
   design-handoff/<date>-<surface>/  # committed Claude Design handoff bundle — the design source of truth (§11)
   ROADMAP.md                        # what's shipped / in progress / deferred (+ deliberate deviations)
@@ -378,6 +382,10 @@ docs/
   runbooks/<module>.md              # per-module regression runbook — tri-purpose E2E source of truth,
                                     #   1:1 with that module's e2e project (§12.9); split into
                                     #   runbooks/<module>/<area>.md when a module has several areas
+  guides/<audience>-guide.md        # OPTIONAL (§17.1) — role-badged end-user / operator guides, derived
+                                    #   from the module docs and verified against the real UI
+  smoke-tests/<date>-<topic>.md     # OPTIONAL (§17.2) — hand-run script for one change or one release;
+                                    #   written only on request, never implied by a change
 src/
   aspire/                           # local-dev orchestration projects, grouped (reference stack: Aspire; §9)
     <App>.AppHost/                  # orchestrates local dev (DB + API + client in one command)
@@ -1570,6 +1578,8 @@ hit. Coverage is a means, not the target — chase *behaviour* coverage (branche
 error paths, cross-module seams), not a vanity line-percentage from trivial
 assertions.
 
+**Everything in this section is automated and mandatory.** The one hand-run practice this blueprint recognises — a short smoke script targeting only what a release changed — is deliberately **optional and on-request** ([§17.2](#172-manual-smoke-tests-docssmoke-tests)), and is never a substitute for anything below.
+
 ### 12.1 The test pyramid (what each layer owns)
 
 Tooling names below are the reference stack's (§3.1) — a different stack keeps
@@ -1940,11 +1950,9 @@ observes. For a significant change:
   integration round-trip over the affected event seam / read model, and the
   e2e journey for any user-facing slice. Those executable checks are the
   regression net — not a hand-run markdown checklist.
-- **Update the affected `docs/modules/<module>.md`** in the same change.
+- **Update the affected `docs/modules/<module>.md`** in the same change — and, where the optional guides practice was adopted (§17.1), the affected `docs/guides/<audience>-guide.md` too if roles, workflows or screens moved.
 
-> (This supersedes an earlier per-change `docs/smoke-tests/` manual-checklist
-> rule that was never adopted: impact analysis now lives in the spec doc, and the
-> regression net is the integration + e2e suite.)
+> **On hand-run checklists.** An earlier version of this rule required a per-change `docs/smoke-tests/` manual checklist on every significant change. That is superseded: impact analysis lives in the spec doc, and the regression net is the integration + e2e suite — never a markdown checklist. A hand-run smoke test remains available as an **optional, on-request** practice for what a human on a real environment can prove and the suite structurally cannot ([§17.2](#172-manual-smoke-tests-docssmoke-tests)) — it is never implied by a change.
 
 ### 13.2 Anti-patterns to reject on sight
 
@@ -2096,7 +2104,9 @@ integration over the event seam + read-model round-trip + access-boundary isolat
 and an **e2e spec for the slice's core journey** (incl. the realtime update
 landing in the UI) — authored as the first **module regression runbook** + its
 per-module e2e project on the real-backend harness (§12.3/§12.9), proving
-persistence via a DB read-back.
+persistence via a DB read-back. This slice is also the point to **offer the
+optional end-user guide practice** (§17.1) — there is now a real audience with
+a real workflow to describe, and the module docs it derives from exist.
 
 **Phase 5+ — Widen.**
 More domain modules, background jobs (the stack's hosted-worker primitive + a
@@ -2152,6 +2162,10 @@ not here — it's established in Phase 2 and extended every phase, §12.)*
 - [ ] Significant change → impact analysis captured in the change's
       `docs/specs/<date>-<topic>.md` (§13.1); the affected
       `docs/modules/<module>.md` and `docs/ROADMAP.md` updated.
+- [ ] **Only where the optional practices were adopted** (§17, recorded in
+      `docs/ROADMAP.md`): guides updated in the same change if roles, workflows
+      or screens moved (§17.1). A smoke test is **not** on this list in either
+      case — it is written only when asked (§17.2), never as part of "done".
 - [ ] No push / PR unless explicitly asked.
 
 ---
@@ -2208,10 +2222,13 @@ typical menu, cheapest first:
 | **Contained** — real code changes, architecture untouched | **Security baseline** (R35/§13.4: secrets out of the repo, auth-by-default, server-side validation, headers/CORS, rate limiting); **constrained-value placement** (R28); **config-switched external-service seams** (§6.6); **bounded/paged queries + one error envelope** (§13); **no-poll rules** (R31 server, §10 client — needs a push channel to exist or be added); **single design-token home** (§11 structural rules). | Refactors with local blast radius; each is a normal change shipping its own tests (per whatever of §12 was adopted). The security baseline is usually the highest-priority pick in this tier. |
 | **Architectural** — re-architecture projects, individually scoped | **Module isolation** (R1–R6); **schema-per-module + per-module migrations** (R7–R11); **events + local read models** replacing direct cross-module calls (R3, R12–R16); **lightweight endpoints** replacing a heavyweight MVC layer (R17); **single push channel owned by Notifications** (R21/R22). | Each is a project with its own plan, sequencing, and data-migration story — never a drive-by. Adopt standalone-tier items first so these land on a safety net. |
 
+Then offer the two **optional practices** (§17) separately from this menu — they are not alignment areas, because an app that skips them is aligned. They belong in the same conversation because they are cheap for an existing app to add (both are pure additions, neither touches runtime behaviour) and because an existing app is exactly where the audit tends to expose that nobody can explain to a customer what the thing does.
+
 Record the outcome in `docs/ROADMAP.md`: **adopted** areas (now binding — they
 join the Definition of Done for every future change), **declined** areas (a
 standing decision: future agents must not re-litigate or quietly "fix" them),
-and **deferred** areas (revisit trigger noted). The gap report plus this
+and **deferred** areas (revisit trigger noted) — plus the §17 answers, in the
+same register and with the same standing force. The gap report plus this
 register replaces Phase-by-Phase build order as the existing app's roadmap.
 
 ### 16.3 Step 3 — align incrementally
@@ -2231,6 +2248,71 @@ register replaces Phase-by-Phase build order as the existing app's roadmap.
 - **Partial alignment is a stable end state, not a failure.** An app that
   adopts only the testing strategy and the static gates is aligned — to
   exactly what its user chose.
+
+---
+
+## 17. Optional practices — offer them, don't assume them
+
+Everything above is either **mandatory** (the Rules Digest) or a **stack choice** (§3). Two further practices sit deliberately outside both, because each produces documents a human then has to keep true, and whether that maintenance is worth paying is the user's call rather than the agent's. **An app that adopts neither is fully aligned.**
+
+**Ask once per practice**, at the point noted below, state the cost as plainly as the benefit, and record the answer in `docs/ROADMAP.md` beside the §3 stack decisions. A declined practice is a **standing decision**: future agents must not re-litigate it, and must not produce its artifacts anyway because a change "felt significant".
+
+| Practice | Offer when | What it buys | What it costs | Plugin |
+|---|---|---|---|---|
+| **§17.1 End-user & operator guides** (`docs/guides/`) | the first user-facing slice ships (Phase 4), and again whenever a new audience appears (an operator console, a public API) | Something to hand a customer, an operator, or a new joiner on the business side. Also a forcing function: a capability nobody can describe in a guide is usually a capability nobody designed. | Guides join the same currency rule as the module docs — roles, workflows or screens change, the guide changes in the same commit. Screenshots go stale on any visual redesign. | [`app-documentation`](../plugins/app-documentation/) |
+| **§17.2 Manual smoke tests** (`docs/smoke-tests/`) | the first release is being planned, or the first time a change lands that only a human on a real environment can prove | A short hand-run script that targets **only what changed** — the one lane that reaches what the automated suite structurally cannot (real auth on a second environment, a real third-party, a migration against real data). | A person's time per release, and a standing temptation to let it stand in for the regression net. The files themselves are disposable, not maintained. | [`smoke-tests`](../plugins/smoke-tests/) |
+
+> **The plugins are optional separately from the practices.** Both practices are plain Markdown conventions that need no tooling; a plugin scaffolds and maintains them where one is available. Conversely, `app-documentation` earns its place even when guides are declined — it also automates the **mandatory** per-module docs (§2, §13.1) and audits them for drift against the code.
+
+### 17.1 End-user & operator guides (`docs/guides/`)
+
+Per-module docs are **mandatory** and explain how the software is **built**. Guides are optional and explain how a person **uses** it. They are different documents for different readers, and the second is derived from the first.
+
+**The chain runs one way: guides are drafted from the module docs and verified against the running UI.** A guide written straight from the screens documents what a button is called; a guide written from the module docs documents why the button is there, what it costs, and what happens next — because the module doc already established the thresholds, the state machine and the failure branches. The reverse pressure matters as much: a capability that cannot be described in the guide *because no module doc explains it* is a hole in the module docs, not a gap in the guide.
+
+Where the practice is adopted, these hold:
+
+- **One guide per audience, not per role.** The people who do the work, the operators who run the platform, the developers who call the API. Roles within an audience become **badges** (`**[Reviewer+]**` = Reviewer and every role above), and where roles are cumulative a task is documented **once**, under the lowest role that can do it. Three copies of a shared workflow disagree within a month.
+- **Badges derive from the auth policies in code** (R-digest "Security", §13.4) — never from what seems reasonable. A stale gate is the most common error in an old guide, because policies get tightened in security passes that touch no feature.
+- **Organised by workflow, never by module.** A user's job crosses modules; a chapter per module is the org chart, not the job. This is the one place the module boundary that governs everything else in this blueprint must be invisible.
+- **Real labels, quoted from source, never recalled.** A guide is judged on its first wrong button name.
+- **Cover the branches that surprise people** — the held submission, the throttle, the retention window, the guard that looks like a bug — and skip the field-by-field tour, which is what the module docs are for.
+- **Diagrams and screenshot placeholders.** Mermaid for the lifecycle, the role hierarchy and the decision flows; keyed screenshot placeholders (`> 📸 **Screenshot \`key\`:** what to capture`) plus an index of keys, so capture can happen later and a missing image is visible rather than silent.
+- **Currency is the real cost.** Roles, workflows or screens change → the guide changes in the same commit, exactly like `docs/modules/<module>.md`. Adopting this practice without accepting that rule produces a guide that is worse than none.
+
+Optionally, the Markdown can be published to **Word/PDF** — a mermaid renderer plus Pandoc with a branded reference document, with the Markdown remaining the single source of truth. Offer it separately; it is a second toolchain to keep working.
+
+What it adds to the tree:
+
+```
+docs/
+  guides/README.md                  # who each guide is for + the badge legend
+  guides/<audience>-guide.md        # e.g. user-guide.md, operator-guide.md
+  guides/screenshots/README.md      # every screenshot key and what to capture
+.claude/app-documentation/profile.md   # what a "part" is here, where docs live, the role model
+```
+
+### 17.2 Manual smoke tests (`docs/smoke-tests/`)
+
+A smoke test is a **short, plain-language script a human runs by hand** to prove a change works in the running app. It is the **delta**; the regression runbooks (§12.9) are the standing coverage. Two shapes: one **change** (`YYYY-MM-DD-<topic>-smoke-test.md`, written with the implementation), or one **release** (`YYYY-MM-DD-release-since-<tag>-smoke-test.md`, written before the tag is cut, scoped from `git diff <lasttag>..HEAD`).
+
+**This is not the superseded per-change checklist** (§13.1). That rule made a hand-run markdown checklist a *requirement* of every significant change, standing in for executable coverage; it was rightly dropped. What is on offer here is the opposite: written **only when asked**, scoped from the diff rather than from a template, and explicitly **not** a substitute for the tests a change already owes (R23/R24) or for the module's runbook. Where the two overlap, the smoke test **copies the runbook case's click path in** rather than telling the tester to go and run it — every redirection is a place the run stalls.
+
+The rules that make it worth doing:
+
+- **Never write one unprompted.** Unlike tests and module docs, a smoke test is never implied by a change, however significant — not by auth, not by a migration, not by touching five modules. If a change looks like it warrants one, **say so and let the user decide.** This is the single most common way to get the practice wrong.
+- **Scope from the diff, not from commit subjects** — and say plainly when the diff is test-only or docs-only, because "there is nothing for a tester to observe" is a finding, not an omission.
+- **Every step has a stated pass condition.** Title, action, `**Expect:**`. A step whose expectation is "it works" is not a test.
+- **A migration that can fail on existing data is step 1, always.** Where migrations run at host startup (R10), a bad one is not a degraded feature — it is a container that will not boot, so it is pre-flighted with a query before anything else is attempted.
+- **Be honest about what a hand-run cannot prove** — a race needing real concurrency, a truncation needing hundreds of rows. Name it, name what covers it, and move on; silently omitting it reads as "covered".
+- **Permanent behaviour belongs in the runbook.** Where a smoke test exposes a journey a tester should run *forever* rather than once, that is a runbook gap (§12.9) and ships as a case plus its 1:1 spec.
+
+What it adds to the tree:
+
+```
+docs/smoke-tests/YYYY-MM-DD-<topic>-smoke-test.md   # dated, disposable once run
+.claude/smoke-tests/profile.md                      # how the app runs, how to sign in, reach the DB/API, tag a release
+```
 
 ---
 

@@ -60,6 +60,7 @@ This repo doubles as a plugin marketplace. Add it once, then install what a repo
 
 | Plugin | What it does |
 | --- | --- |
+| [`app-documentation`](./plugins/app-documentation/) | Document how an application works: a grounded technical reference doc per part of the system, then end-user and operator guides derived from them and verified against the real UI. Audits existing docs for drift. |
 | [`regression-runbooks`](./plugins/regression-runbooks/) | Exhaustively explore a web-app area and author tiered regression runbooks that drive both manual and automated testing. The **standing** coverage. |
 | [`smoke-tests`](./plugins/smoke-tests/) | Write short manual test scripts for one change, or for everything since the last release so a tester can target only what changed. The **delta** — cites runbook cases rather than restating them. |
 
