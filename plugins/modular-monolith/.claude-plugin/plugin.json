@@ -1,0 +1,13 @@
+{
+  "name": "modular-monolith",
+  "version": "0.1.0",
+  "description": "The modular-monolith blueprint as an installable plugin: audit a repo against it, let the user adopt or decline each area, and record the decisions in docs/ROADMAP.md so future agents enforce exactly what was chosen — and never re-litigate what was declined.",
+  "author": {
+    "name": "Warwick Schroeder",
+    "url": "https://github.com/warwickschroeder"
+  },
+  "homepage": "https://github.com/warwickschroeder/repo-standards",
+  "repository": "https://github.com/warwickschroeder/repo-standards",
+  "license": "MIT",
+  "keywords": ["architecture", "modular-monolith", "blueprint", "standards", "adoption", "roadmap", "governance"]
+}

@@ -60,10 +60,15 @@ This repo doubles as a plugin marketplace. Add it once, then install what a repo
 
 | Plugin | What it does |
 | --- | --- |
+| [`modular-monolith`](./plugins/modular-monolith/) | The modular-monolith blueprint, installable. Audits a repo against it, lets you adopt or decline each area, and records the decisions in `docs/ROADMAP.md` so agents enforce exactly what was chosen — and never re-litigate what was declined. |
 | [`app-documentation`](./plugins/app-documentation/) | Document how an application works: a grounded technical reference doc per part of the system, then end-user and operator guides derived from them and verified against the real UI. Audits existing docs for drift. |
 | [`regression-runbooks`](./plugins/regression-runbooks/) | Exhaustively explore a web-app area and author tiered regression runbooks that drive both manual and automated testing. The **standing** coverage. |
 | [`smoke-tests`](./plugins/smoke-tests/) | Write short manual test scripts for one change, or for everything since the last release so a tester can target only what changed. The **delta** — cites runbook cases rather than restating them. |
 
 ## Blueprints
 
-[`Blueprints/`](./Blueprints/) holds the org-wide architecture blueprints a repo is expected to conform to.
+The **modular-monolith blueprint** — the org-wide architecture spec — now ships inside the [`modular-monolith` plugin](./plugins/modular-monolith/), split into [one file per section](./plugins/modular-monolith/skills/modular-monolith/blueprint/README.md). It moved there because the plugin mechanism only distributes `plugins/<name>/`, so a copy under `Blueprints/` could never reach another machine.
+
+For an **existing** repo the blueprint is a menu, not a mandate: `/blueprint-align` audits the repo, you adopt or decline each of the 17 areas, and the decisions land in that repo's `docs/ROADMAP.md` as a standing register. Everything downstream — reviews, checks, future agents — is scoped by that register.
+
+[`Blueprints/MODULAR-MONOLITH-BLUEPRINT.md`](./Blueprints/MODULAR-MONOLITH-BLUEPRINT.md) is a redirect kept so existing links resolve.
