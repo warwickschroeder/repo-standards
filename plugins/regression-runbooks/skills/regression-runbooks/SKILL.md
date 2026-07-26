@@ -203,6 +203,15 @@ regressions — and the skill compounds so each area is cheaper than the last.
 - Fixed `sleep` waits — assert on observable state (toast, URL change, row
   count, status field) rather than waiting an arbitrary duration.
 - Renumbering TC IDs when editing — breaks the spec mapping; only append.
+- **Checking 1:1 in one direction only.** "Every case has a spec test" is the half
+  everyone polices. The reverse — a spec asserting a rule **no case owns** — is
+  invisible to it, and happens whenever a fix lands its assertion inside an
+  existing test instead of adding a case. The rule then has no owner: nobody
+  reviews it, whichever parts of it nobody happened to assert stay uncovered, and
+  a later reader of the case text correctly concludes the behaviour is untested
+  and files a duplicate. When a fix adds an assertion, check it lands in a
+  **case**, not just in a test; and periodically diff the other way — for each
+  behaviour a spec asserts, name the case that owns it.
 - Not diffing against a legacy manual runbook — a new tiered runbook that passes
   its own suite can still silently drop whole field groups, derived-UI,
   conditional-display flows, and exact validation strings that the older doc

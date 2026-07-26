@@ -1038,6 +1038,28 @@ paragraph, not the control. Fix: `getByText('<label>', { exact: true })`.
 Move the label to `inputProps={{ 'aria-label' }}` or `slotProps.htmlInput` to
 name the actual input.
 
+**A case's own setup can disable the control the case needs.**
+A case that creates work (a pending row, an in-flight job) and then presses the
+button that acts on it may find the button greyed out — because the state it
+just created is an input to that control's enablement. Seen as `busy =
+pendingCount > 0` disabling both **Run now** and **Rebuild index**: the case
+broke a document so the indexer would fail to read it, which put the row back in
+the pending set, which turned off the button the case existed to exercise. The
+manual step ("press Run now three times") was simply unrunnable. **Read a
+control's `disabled` expression, not just its label, whenever a case sets up
+state before clicking it** — and where the UI genuinely locks itself out, drive
+the action from the endpoint behind the button, which usually carries a narrower
+guard.
+
+**A DB-constraint case written as an `UPDATE` can pass vacuously.**
+`UPDATE … WHERE "Email" = …` proves a CHECK constraint only if a row matches. In
+a projected read model it may not: a table fed by a domain event holds rows only
+for the entities that have raised one, so for an untouched entity the statement
+matches zero rows, **succeeds**, and the assertion that the write is *rejected*
+never fires. Green, proving nothing. Use an `INSERT` — it always attempts the
+write, so it always reaches the constraint, and it assumes nothing about seeded
+data. If an UPDATE is unavoidable, assert the target row exists first.
+
 ---
 
 ## §9 Test-case ID scheme
