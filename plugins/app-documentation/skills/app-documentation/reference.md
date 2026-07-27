@@ -312,6 +312,10 @@ Accumulated lessons. Add to this section when a run teaches something that gener
 - **Write the index before the first part doc.** It forces the partition decision into the open, where it can be argued about cheaply.
 - **Tests are the best source for the *why*.** A guard with a cryptic name usually has a test whose name is the sentence the doc needs.
 - **Cross-part behaviour has no natural home.** Each part's doc describes its half and the flow appears nowhere whole. Narrate it once in the index's *How the parts fit together*, and have each part doc point there rather than half-explaining it.
+- **A cross-part protocol gets documented on the initiating side only.** When a new part needs a replay/backfill exchange, its own doc describes the whole thing and the *answering* parts' docs are never touched — each still reads as coherent alone, so a per-doc review cannot see it. In an audit, derive publish/subscribe **from source, per part**, and diff against that part's doc; never read the initiator's description and assume the other halves exist.
+- **Verify every gate "miss" with a grep before it reaches the drift table.** A parser that assumes one table format produces phantom drift the moment a doc set uses two — a verb column beside a path column in one doc, the method and path together in a single cell in another, or two sibling paths sharing one cell. A reported item that turns out to be a parser bug teaches the reader to discount the entire report — a false positive costs as much trust as a real miss.
+- **A constructor-name grep misses target-typed `new()`.** `static Snapshot ToSnapshot(...) => new(...)` names the type only in the signature, so gating "what does this part publish?" on `new EventName(` silently drops a whole event. Match the declared return type too.
+- **Record the non-parts, not just the parts.** The profile should say what was deliberately excluded from the partition and why (orchestration projects, generated clients, sample apps). Without that line the next run re-litigates the decision, and the "every part has a doc" gate flags an intentional omission as a hole.
 
 ---
 
