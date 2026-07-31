@@ -680,16 +680,31 @@ JSX or the failure snapshot for the actual `aria-label`. A button's aria-label
 may differ from its rendered text (e.g. a "Clear Filters (3)" button with
 `aria-label="Clear all filters"`).
 
-**An `aria-label` that appends a live count is a locator that breaks the moment a case seeds data.**
-A control whose name is built conditionally (`aria-label={n > 0 ? 'Sync Hub, N
-changes waiting to upload' : 'Sync Hub'}`) matches an exact `{ name: 'Sync Hub' }`
-on an empty profile and stops matching as soon as the case creates anything. It
-reads as a flake, because the same locator passes in one test and fails in the
-next depending only on what that test seeded. Anchor the regex
-(`{ name: /^Sync Hub/ }`), and assert the whole string with
-`toHaveAccessibleName` only where the count itself is under test. Common
-wherever a visible badge is `aria-hidden` decoration and the number rides in the
-name instead. (2026-07-31, DrillLogify Dashboard.)
+**`getByRole`'s `name` is a case-insensitive SUBSTRING match by default. Both directions of that bite.**
+Playwright matches the accessible name as a substring unless `exact: true` is
+passed, so the same default causes two opposite failures:
+
+- **Too loose.** `getByRole('button', { name: 'Review' })` also matches a sidebar
+  entry named **Duplicate Review**, so an absence assertion fails against an
+  element in completely different chrome, and a click can land on the wrong one.
+  Any short, common label (`Review`, `Import`, `New`, `Edit`) needs `exact: true`,
+  a landmark scope, or both.
+- **Too tight, once you fix the above.** A control whose name is built
+  conditionally (`aria-label={n > 0 ? 'Sync Hub, N changes waiting to upload' :
+  'Sync Hub'}`) keeps matching the bare `{ name: 'Sync Hub' }` *only because* of
+  the substring default. Add `exact: true` and it silently stops matching the
+  moment a case seeds anything, which reads as a flake: the same locator passes
+  in one test and fails in the next depending only on what that test created.
+
+Prefer an **anchored regex** (`{ name: /^Sync Hub/ }`) where a name has a stable
+prefix and a variable tail, since it survives both directions and documents which
+half is stable; assert the whole string with `toHaveAccessibleName` only where the
+variable part is itself under test. Common wherever a visible badge is
+`aria-hidden` decoration and the number rides in the accessible name instead.
+(2026-07-31, DrillLogify Dashboard. Recorded first with the substring default
+stated backwards, and corrected only when a run proved it: **verify a framework's
+matching semantics against the docs or a run, never from memory** — the same rule
+this skill already applies to an app's own copy.)
 
 ---
 
