@@ -466,6 +466,24 @@ try {
 }
 ```
 
+### Absence assertions need a positive control, and the control must be UNGATED for that persona
+
+An RBAC case is mostly absence assertions: "a Read Only user does not see X". Every one of them passes just as happily when the page never rendered at all, which on a lazy route is the likelier failure. So each absence gets a **positive control** asserted **first**: something of the *same locator shape, in the same landmark*, that the persona **does** see.
+
+**The trap is picking a control that is itself gated.** "The sidebar has no Sync Hub entry" paired with "but it does have Import Hub" looks like a control and is not: Import Hub is `canImport`-gated and Read Only lacks `canImport`, so it is absent for exactly the same reason as the thing under test, and the case fails on the control rather than on the behaviour. Read the nav/menu definition and pick an entry with **no permission and no feature gate** — ideally a sibling in the **same section**, so the control also proves that section rendered.
+
+```ts
+// Positive controls FIRST — same landmark, same role, ungated for this persona.
+await expect(page.getByRole('main').getByRole('button', { name: 'Quick actions' })).toBeVisible();
+await expect(page.getByRole('navigation').getByRole('button', { name: 'User Settings' })).toBeVisible();
+// …then the absences.
+await expect(page.getByRole('navigation').getByRole('button', { name: 'Sync Hub' })).toHaveCount(0);
+```
+
+Pair it with a **cross-persona** control where the cost is one extra context: assert the *same locators* find the entries for someone who is allowed, so a silently-wrong locator cannot pass the absence half.
+
+**And hand-verification does not substitute for running it.** Inspecting the live DOM proves a locator resolves *for you* — normally a fully-privileged dev persona. It cannot catch a control that is invisible to the persona the case logs in as. (2026-07-31, DrillLogify `TC-SYNC-T7`: rewritten, hand-verified, left unrun, failed on precisely this.)
+
 ---
 
 ### Gotcha catalogue
@@ -662,6 +680,17 @@ JSX or the failure snapshot for the actual `aria-label`. A button's aria-label
 may differ from its rendered text (e.g. a "Clear Filters (3)" button with
 `aria-label="Clear all filters"`).
 
+**An `aria-label` that appends a live count is a locator that breaks the moment a case seeds data.**
+A control whose name is built conditionally (`aria-label={n > 0 ? 'Sync Hub, N
+changes waiting to upload' : 'Sync Hub'}`) matches an exact `{ name: 'Sync Hub' }`
+on an empty profile and stops matching as soon as the case creates anything. It
+reads as a flake, because the same locator passes in one test and fails in the
+next depending only on what that test seeded. Anchor the regex
+(`{ name: /^Sync Hub/ }`), and assert the whole string with
+`toHaveAccessibleName` only where the count itself is under test. Common
+wherever a visible badge is `aria-hidden` decoration and the number rides in the
+name instead. (2026-07-31, DrillLogify Dashboard.)
+
 ---
 
 #### `<Link component="button">` and clickable cards
@@ -678,6 +707,54 @@ bubbles to the `onClick`) and **flag the a11y gap** (proper fix: `ButtonBase` /
 `role="button"` + key handler). Caution: a card title can collide with a
 sidebar nav item of the same name — match `exact` against a name the sidebar
 doesn't carry, or scope to the page content.
+
+**When that card's title ALSO collides, stop working around it and fix the app: the a11y bug and the selector gap are the same bug.**
+The text-click fallback above only holds while the title is unique. On a
+dashboard it usually is not: a KPI tile labelled "Drill Holes" collides with the
+sidebar entry *and* with a per-type chip of the same name, so `getByText`
+resolves to three elements and trips strict mode with no scoping that separates
+them. At that point the workaround is exhausted and the correct fix is one edit
+in the component: `role="button"` + `tabIndex={0}` + `aria-label={label}` + an
+Enter/Space handler, applied **only when an `onClick` is present** so
+non-interactive instances stay plain. That makes the tile keyboard-operable and
+addressable in the same change. Prefer `aria-label={label}` over letting the
+name fall back to the tile's text content, which would otherwise read out every
+number on it. (2026-07-31, DrillLogify Dashboard.)
+
+---
+
+#### Tables that group rows, and content hidden by default
+
+**When a table's identifying column is removed, look for a per-row CONTROL before reaching for `data-testid`.**
+Row locators are usually built on the one cell that identifies the row
+(`filter({ has: cell "UPLOAD" })`). Collapse two records into one row, or drop a
+column, and every such locator dies at once — and `role=row` is no help, because
+it also matches the header, the always-rendered expand-detail row that follows
+each data row, and any full-width toggle/pager rows in the body. The stable
+replacement is a control **every data row carries and no other row does**,
+almost always the expand toggle:
+`getByRole('row').filter({ has: getByRole('button', { name: 'Toggle row details' }) })`.
+Address one specific row by filtering that set again on a unique cell value you
+injected. (2026-07-31, DrillLogify Sync Hub.)
+
+**A new "hide the boring ones" default is a breaking change to every case that relied on a boring one being visible.**
+Folding low-value rows away behind a `Show N …` toggle is a normal UI
+improvement and a silent test break: a case that did the cheapest possible setup
+(sync with nothing pending, save with nothing changed) now produces exactly the
+row the fold hides, and "the record renders" fails for a reason unrelated to
+what it tests. Two fixes, both needed: **seed real work** in every case that
+expects to see a row, and give the fold **its own case** (hidden by default,
+revealed by the toggle, label flips). Drive that case from an **injected** row
+rather than a provoked one — whether a real action happens to be a no-op depends
+on harness residue, and the fold's behaviour should not. (2026-07-31,
+DrillLogify Sync Hub.)
+
+**An inverted premise needs the old control's ABSENCE asserted.**
+When a page moves from manual refresh to event-driven re-query, the case that
+proved "stale until you press Refresh" inverts to "appears on its own". Asserting
+only the new behaviour still passes if someone re-adds the button and the
+subscription rots, so assert `getByRole('button', { name: 'Refresh' })` has
+**count 0** in the same case.
 
 ---
 
