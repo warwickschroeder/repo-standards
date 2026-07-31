@@ -1,6 +1,6 @@
 {
   "name": "app-documentation",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "description": "Document how an application actually works — one grounded reference doc per part of the system, then end-user and operator guides derived from them and verified against the real UI. Audits existing docs for drift against the code.",
   "author": {
     "name": "Warwick Schroeder",
