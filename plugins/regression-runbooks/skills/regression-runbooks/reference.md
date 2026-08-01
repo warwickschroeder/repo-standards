@@ -452,6 +452,44 @@ The harness typically exposes:
 
 Server assertions must **poll** (`expect.poll(...)`) — backend writes are async.
 
+### Non-DOM visuals (maps, charts, canvases): the class-hook rule
+
+Anything drawn as **SVG or canvas** has no role, no accessible name, and no text
+for `getByRole`/`getByText` to find. Leaflet pins, hand-rolled chart marks, the
+strip-log columns: all of them are `<path>` / `<rect>` / `<circle>` elements.
+
+- **Tag them with a stable `className` and assert on COUNTS.** Never assert on
+  stroke or fill colour: the theme remaps every colour per variant (Ocean /
+  Graphite / Warm / Slate) and again per light/dark, so a colour assertion breaks
+  on a palette change that broke nothing real. `page.locator('.collar-pin')` plus
+  `toHaveCount(n)` is stable; "the pin is orange" is not.
+- **LEAFLET + REACT-LEAFLET TRAP: `className` in `pathOptions` is dead on
+  arrival.** Two independent layers drop it. react-leaflet's `usePathOptions`
+  applies path options **only** via `instance.setStyle(options)` in an effect,
+  never through the Leaflet constructor; and Leaflet sets `options.className`
+  **only** in `SVG._initPath` at creation, because `_updateStyle` rewrites
+  `stroke` / `fill` / `stroke-width` and never touches the class. So the class
+  never lands: not at mount, not on update. The failure mode is nasty, because
+  the *visible* state still changes correctly (colour and weight DO go through
+  `setStyle`), so the feature looks right in the browser and only the
+  class-based assertion fails, which reads as a flaky selector rather than the
+  real bug. Fix: give each mark its own component holding a `ref`, and set the
+  classes on the element in a `useEffect`
+  (`layer.getElement().classList.add('x')` / `.toggle('x-focused', on)`). Child
+  effects run before parent effects, so a `<CircleMarker>` rendered by that
+  component is already added to the map when the effect fires. That effect is
+  also the natural home for `bringToFront()`, since Leaflet paints in creation
+  order and a highlighted mark otherwise hides under its neighbours.
+- **A tooltip bound to a mark is not inside the mark.** Leaflet renders it into
+  `.leaflet-tooltip` at the pane level. Hover the mark, then assert on the
+  tooltip container filtered by text. Mind `permanent` vs hover tooltips: a
+  `CircleMarker` takes exactly one Tooltip, so a component showing permanent
+  labels in one view and hover labels in another has **no hover tooltip at all**
+  in the permanent view. Assert hover behaviour on the view that has it.
+- **Record the hook in the area's Testability-gaps table** with the reason
+  ("SVG path, no role"), so the next author does not "fix" it into a `getByRole`
+  that cannot exist. (Projects T27, 2026-08-01.)
+
 ### Second-profile conflict context — canonical snippet
 
 ```ts
