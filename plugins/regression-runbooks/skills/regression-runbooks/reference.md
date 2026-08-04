@@ -531,6 +531,56 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 
 ---
 
+#### A preference is not covered until something READS it
+
+**2026-08-04, DrillLogify Web.** A "Compact View" switch on the user-settings page had a runbook case, a passing spec test, a stored key, and **no consumer anywhere in the codebase**. The control changed nothing; its green case proved only that a switch flips. Every layer of the net was satisfied because each layer only ever checked the layer beside it: the case asserted the control, the spec asserted the case, the parity gate asserted the ids.
+
+- **Write the case against the EFFECT, not the control.** Set the preference, then assert what it changes somewhere else in the app: a date rendering in the chosen format, a list getting denser, a column appearing. A case that only round-trips the control is a tautology dressed as coverage.
+- **The audit is seconds long.** For each settings key, grep it and count the readers. One reader (the settings page itself) means the control is dead.
+- **Applies to any write whose only observable effect is its own control:** a toggle, a saved filter, a view mode, a "remember this" checkbox.
+- **When the finding lands, the control is the decision, not the test.** Removing a dead control retires its case (never renumber); implementing it is a feature with its own scope. Ask rather than choosing.
+
+#### An "out of scope" note is a claim with a shelf life
+
+**2026-08-04, DrillLogify Web.** Three of one runbook's stated absences were justified by real limitations that had since disappeared: the runner grants geolocation directly, the harness had gained role switching months earlier, and route interception reaches states one seeded backend cannot produce. Each reason still *read* plausibly, which is precisely why nobody re-checked it. The area sat at 8 cases against about 66 behaviours partly on the strength of those three notes.
+
+- **Re-test the premise, not the reason.** "Needs a real permission", "the harness only logs in as X", "one seeded tenant cannot produce this" are all statements about tooling, and tooling moves.
+- **Attack the stated absences first** when you reopen a runbook. They are where the coverage went to hide, and they are cheap to re-check.
+- **Date every absence** so its age is visible, and prefer a machine-checkable reason (`absent:harness-limitation`) over prose.
+
+#### Two surfaces showing the same thing need a shared implementation, not a shared namespace
+
+**2026-08-04, DrillLogify Web.** Two pages ran the same four diagnostics. They already agreed on a `sessionStorage` prefix and had still drifted: the check names differed in casing, one skipped a branch the other ran, and they stored their payloads under different keys. Sharing the namespace was **worse** than not sharing, because the flag one page wrote suppressed the other's work while the payload that page needed was absent, leaving it stating a status above an empty list.
+
+- **Extract the logic, export the canonical names as a constant**, and have both runbooks assert that constant rather than retyping the strings.
+- **A shared storage prefix with no shared owner is the smell.** Two features reading one namespace must each validate what they restored rather than trust a boolean the other wrote.
+- **Write the cross-surface case from both ends:** one case proves the cache is populated and named correctly, its sibling proves the other surface reads the same thing.
+
+#### A CSS-uppercased label matches its AUTHORED casing
+
+**2026-08-04, DrillLogify Web.** Micro-labels rendered upper-case through `text-transform`, which is the correct choice (casing the string in JS is what a screen reader announces, and it mangled `µS/cm` into `ΜS/CM`). So the screen reads `KEPT IN` while the matched text is `Kept in`. A spec written from a screenshot produced **twelve** assertions that could not pass.
+
+- **Assert the string as written in the source**, with the exactness flag on. Without it the match is case-insensitive and passes while proving nothing about casing.
+- ⚠️ **A label split into per-segment elements to protect units or internal capitals is broken across elements**, so a whole-label match finds nothing. Address it by a segment, or by the value beside it.
+- **Same class of trap:** any CSS that changes rendered text (`text-transform`, `::before` content, `first-letter`). What you see is not what the runner matches.
+- ⚠️ **Only half of these wrong assertions tell you they are wrong.** In the same file, a `toBeVisible()` on the rendered caps failed loudly while a `toHaveCount(0)` on the identical impossible string **passed**: a count-zero assertion on text the app can never produce passes whichever way the app behaves. A permission-absence case reported green with two vacuous assertions inside it. **After any casing or copy change, invert every count-zero text assertion and confirm it can fail.**
+
+#### Scope a heading or landmark COUNT to the page's main region
+
+**2026-08-04, DrillLogify Web.** Two of six run failures were the **app shell's** own headings counted against the page's outline: a tenant name in the app bar and a product name in the nav drawer. The page was correct both times, and the case pointed at the wrong file. Anything that **counts** elements rather than naming one needs a container (`getByRole('main')`), or the shell fails your case for you. Corollary worth noting in the runbook: if the shell's own headings are themselves wrong (both of those are values rendered as headings), that is the shell area's finding, not yours.
+
+#### Read the branch, don't infer the constant
+
+**2026-08-04, DrillLogify Web.** A geolocation case expected the coordinate-system code for one datum where the app's own region table returns another for the same zone (GDA2020's `7800 + zone`, not GDA94's `283xx`). The wrong value looked authoritative in **both** the runbook and the spec, because it was written from domain knowledge rather than from the function. Derive an expected constant by reading the code that produces it, and cite the branch in the case so the next reader can check it in seconds.
+
+#### Check a "scope to the card" locator resolves to ONE element
+
+**2026-08-04, DrillLogify Web.** Filtering containers by a heading they contain matched **both** the inner panel and the outer section card wrapping it, so scoping to "the card" failed strict mode. Nested containers sharing a class is the normal case in a component library, not the exception. Count the matches before trusting a filter, and take the innermost explicitly when that is what you mean.
+
+#### An ungated page still needs a persona case, and it is the inverse of the usual one
+
+**2026-08-04, DrillLogify Web.** For a page every role can reach, the guard worth asserting is that a **read-only persona gets in**, plus whichever regions differ by permission. A privileged persona proves none of it, and "no gate" is otherwise an untested claim sitting in the runbook header. Same discipline as the positive-control rule: the assertion has to be capable of failing.
+
 #### Template scaffolding the app cannot have (the "13 apologies" smell)
 
 **2026-07-26, Forge.Translation.** This template began life in an offline-first

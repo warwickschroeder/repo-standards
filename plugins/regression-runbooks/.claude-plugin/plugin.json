@@ -1,6 +1,6 @@
 {
   "name": "regression-runbooks",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Exhaustively explore a web-app area and author tiered regression runbooks that drive manual and automated testing, deriving every field from the repo's source-of-truth and verifying persistence. Self-improves after every run.",
   "author": {
     "name": "Warwick Schroeder",
@@ -9,5 +9,12 @@
   "homepage": "https://github.com/warwickschroeder/repo-standards",
   "repository": "https://github.com/warwickschroeder/repo-standards",
   "license": "MIT",
-  "keywords": ["testing", "e2e", "regression", "runbooks", "qa", "playwright"]
+  "keywords": [
+    "testing",
+    "e2e",
+    "regression",
+    "runbooks",
+    "qa",
+    "playwright"
+  ]
 }
