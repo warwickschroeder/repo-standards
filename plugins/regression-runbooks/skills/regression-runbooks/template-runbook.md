@@ -534,7 +534,7 @@ Filenames are **date-prefixed**, so the folder listing shows at a glance which s
 
 | File | State | Cases |
 | --- | --- | --- |
-| `{{YYYY-MM-DD}}-01-{{state}}-{{width}}-{{theme}}.png` | {{what it shows}} | {{TC-{{AREA}}-S1}} |
+| `{{YYYY-MM-DD}}-01-{{state}}-{{width}}-{{theme}}.jpg` | {{what it shows}} | {{TC-{{AREA}}-S1}} |
 
 <!-- If the area genuinely has one rendering only, one row is correct. An image that
      no case references is either a missing case or a stale screenshot. -->

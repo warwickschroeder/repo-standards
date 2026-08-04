@@ -1192,6 +1192,122 @@ data. If an UPDATE is unavoidable, assert the target row exists first.
 
 ---
 
+#### A case-sensitive text assertion is invisible to every parity gate
+
+**2026-08-04, DrillLogify, Developer Console.** A repo can have a gate checking
+spec-targeted **button names** against the app, another checking **case IDs** both
+ways, and still ship two dead cases. A dialog title asserted with `toContainText`
+is neither a button nor an ID, and `toContainText` normalises **whitespace only,
+not case**. Two cases asserted `Edit Tenant Details` and `Edit License`; the app
+had said `Edit tenant details` and `Edit the license for <tenant>` since those
+dialogs moved onto the shared form-dialog primitive, a change the repo's own
+casing gate had *forced*. Neither gate could see it, and the file read as clean.
+
+- **After any copy or casing change, grep the specs for the old string.** The
+  gates cover controls and identifiers; prose assertions are on you. Cheap
+  insurance: a run costs 20 to 30 minutes and each stale assertion surfaces as a
+  timeout.
+- **A casing gate that reads JSX props cannot see a title passed as state.** The
+  same repo's guard scans `title="…"` on the dialog primitives and literal
+  `<DialogTitle>` text. Two confirm dialogs built their titles into a state
+  object, so `Change User Role` and `Deactivate User` survived an app-wide
+  sentence-case sweep. **If a title is computed, its casing has no automated
+  guard at all**, so check those by hand when reviewing the area.
+
+#### A negative text assertion cannot see casing without an exactness flag
+
+**2026-08-04, DrillLogify.** `expect(getByText('Included in ENTERPRISE')).toHaveCount(0)`
+resolved to **10** elements against an app rendering `Included in Enterprise`.
+Playwright's `getByText` is **case-insensitive substring** by default, so the
+assertion matched the exact string it existed to rule out. The app was correct
+and the guard was incapable of expressing its own claim.
+
+It failed loudly, which was luck. **Written the other way round it passes
+vacuously forever:** a `toHaveCount(0)` against text the app never says is green
+whether or not the app is right, so the one assertion written to catch a casing
+regression would let it through silently.
+
+- **Any assertion whose purpose is casing or exact wording takes `exact: true`**
+  (or an anchored regex). That is what makes it case-sensitive and whole-string.
+- Same default, two failure modes: over-matching two *elements* is the
+  strict-mode collision everyone knows; over-matching one *string* is this, and
+  it hides in negative assertions where nothing ever resolves to complain.
+- **Audit rule:** grep the spec for `toHaveCount(0)` and `not.toBeVisible()` on
+  text locators, and check each one could actually fail.
+
+#### When a page has several handlers of the same shape, diff them first
+
+**2026-08-04, DrillLogify.** One page had three migration handlers. One branched
+on the response's failure count and reported failures through the error alert;
+the other two always called the success setter, so a run with failures rendered
+a **green** alert with "1 failed" inside the reassuring sentence. An operator
+would move on believing the schema had changed.
+
+Nothing was wrong with any handler read in isolation: the correct sibling is
+what made the other two obviously wrong. **Diff same-shaped handlers against each
+other before reading any closely.** It is the cheapest way to find an
+outcome-reporting bug, a class no type, lint or coverage gate can see.
+
+#### A warning in a PASSING test's stderr is a finding
+
+**2026-08-04, DrillLogify.** A green unit run carried a component-library warning
+("you are providing a disabled button child to the Tooltip component") in one
+test's `stderr`. That is a real defect (a disabled element fires no events, so
+the tooltip can never open) and it sat in a **shared** component used by two
+areas. Driving the app then found the same class on four more buttons, one of
+which renders disabled on first paint because its data has not arrived, so every
+visit to that tab logged it.
+
+- **Read the stderr blocks in a passing run, not just the ✓ count.**
+- **The fix that keeps the tooltip useful** is to render the bare control while
+  it is disabled rather than wrapping it in a span: a control carrying its own
+  accessible name loses nothing for the moment it is unusable.
+
+#### Mock the API to reach the states one seed cannot produce
+
+**2026-08-04, DrillLogify.** A platform-admin area's seed held one tenant, one
+user, a healthy database and a licence valid for months. That made the
+expired-licence chip, the offline-database recovery action, the over-five-item
+summary, the seat-limit warning and all three API-failure messages
+*structurally* unreachable, so they had been recorded as "out of scope" for a
+year. Fulfilling the admin endpoints' responses with the runner's route
+interception reached every one, cost the shared control DB nothing, and needed no
+new fixture. Coverage went 9 → 39 cases, and most of the new ground was error and
+boundary states rather than more happy paths.
+
+**Before writing "cannot be reproduced in the harness", ask whether the response
+can simply be fulfilled.** The genuine limits are usually authentication and
+third-party redirects, not data shapes.
+
+⚠️ **The glob-collision trap.** A collection endpoint and its item endpoint
+(`…/tenants` and `…/tenants/*`) return different payload shapes. One glob
+catching both makes the list answer with an item payload and the page renders
+**empty**, which reads as a broken mock rather than an over-broad route. Pin each
+glob to one endpoint.
+
+#### Measure a visual defect before reporting it, and after fixing it
+
+**2026-08-04, DrillLogify.** Fourteen defects were found by driving two pages in a
+real browser. **Six needed a measurement rather than a reading:** two chips whose
+computed colours were byte-identical while meaning different things, three
+`aria-labelledby` references pointing at ids no element carried, a dialog whose
+*paper* scrolled instead of its content so the action bar scrolled out of reach,
+and an accessible name with a required-marker asterisk folded into it. All
+fourteen survived typecheck, lint, dead-code, copy-paste and 7,718 unit tests.
+
+One of the same session's candidate findings was wrong for the opposite reason: a
+label appeared to overlap its chip, and measuring both bounding boxes showed an
+8px gap: the mouse cursor was sitting between them in the screenshot.
+**Measure to confirm, not only to quantify.**
+
+Cheap measurements worth reaching for: `getComputedStyle` on two elements that
+should differ; `getElementById` on every `aria-labelledby` / `aria-controls`
+value; `scrollHeight > clientHeight` on both a scroll container and its intended
+child; the accessible name via `aria-label`, or the label's text with
+`aria-hidden` subtrees excluded.
+
+---
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated
@@ -1348,8 +1464,15 @@ smallest set covering the area's distinct renderings:
 
 ### Naming and storage
 
-`docs/runbooks/screenshots/<area>/<YYYY-MM-DD>-<nn>-<state>-<width>-<theme>.png`,
-e.g. `2026-08-04-01-idle-1440-dark.png`, `2026-08-04-04-idle-phone-dark.png`.
+`docs/runbooks/screenshots/<area>/<YYYY-MM-DD>-<nn>-<state>-<width>-<theme>.<ext>`,
+e.g. `2026-08-04-01-idle-1440-dark.jpg`, `2026-08-04-04-idle-phone-dark.jpg`.
+
+**The extension is whatever the capture tool writes, and `.jpg` is fine.** These are
+reference images a human compares against, not pixel-diff baselines, so lossy
+compression costs nothing that matters and keeps the repo smaller. Do not go looking
+for a converter to force one extension: a repo whose folders end up mixed because the
+tool changed is a non-issue, and adding an image-processing dependency to satisfy a
+naming convention is a bad trade.
 
 - **The date leads**, so the folder listing shows at a glance which states were
   re-shot in the latest pass and which are older vintage. On a partial re-shoot the
@@ -1381,12 +1504,28 @@ stale screenshot, and both are worth knowing.
 
 ### Capturing them
 
-Drive the **real running app**, never a mock or a component-test render. Any browser
-automation the harness offers will do. Two things to get right:
+Drive the **real running app**, never a mock or a component-test render.
+
+**Use the same browser automation the rest of the review used**, which in Claude Code
+means the `claude-in-chrome` plugin. It drives the session that is already signed in
+and already on the right tenant, so there is nothing to set up, and its screenshots
+land as `.jpg`, which is fine (see the naming note above). Reaching for a second
+browser plugin purely to control the output format is not worth the extra moving part:
+it runs its own profile, so you re-authenticate, re-navigate, and shoot a session that
+is not the one you just reviewed.
+
+Then two things to get right:
 
 - **Set the viewport explicitly** before shooting and put the width in the filename.
-  A screenshot with no stated width cannot be compared to anything later.
+  A screenshot with no stated width cannot be compared to anything later. Note the
+  filename width is the **nominal window width** you asked for; the image itself is the
+  viewport, so it is legitimately a little narrower and shorter.
 - **Clear the client-side state that leaks between shots.** `sessionStorage` and
   `localStorage` survive navigation, so a marker left by a previous capture silently
   renders a *different state* than the one you meant to shoot. This has already
   produced a screenshot of the wrong state filed under the right name.
+  ⚠️ **Clear the markers, not the store.** In a real signed-in session the same storage
+  holds the user's own preferences and, in an offline-first app, the local database
+  itself. Remove the specific keys the states you are shooting branch on, and where an
+  area reads no storage marker at all, there is nothing to clear: say so in the run
+  notes rather than wiping a developer's working data to satisfy a checklist item.
