@@ -93,6 +93,14 @@ assertion just to go green; fix the root cause. If the repo has no harness,
 stop at a manual-runnable runbook and flag the gap. See `reference.md` for
 selector conventions and form-control gotchas.
 
+Once the run is green **and the user has signed off on how the UI looks**, capture
+the **approved screens** (`reference.md` §11): one image per state a case asserts
+against, into `docs/runbooks/screenshots/<area>/`, listed in the runbook's
+**Approved screens** table against the cases each backs. After sign-off, never
+before — these are the *approved* screens, and an image shot earlier looks
+complete while showing a UI that has since changed. Any UI fix made during the run
+means re-shooting the states it touched, and a copy or casing edit counts.
+
 ### Phase 6 — Self-improve (last step, always)
 
 Classify each lesson: repo-specific or generalizable? When in doubt, treat it
@@ -118,6 +126,14 @@ regressions — and the skill compounds so each area is cheaper than the last.
 - **Tri-purpose:** a case that can't be run by a human on a second environment
   *and* expressed as an e2e step is incomplete. Use `getByRole(role, { name })`
   targets; flag missing accessible names as testability gaps.
+- **Every runbook ships approved screenshots of its final UI**, in
+  `docs/runbooks/screenshots/<area>/`, one per state a case asserts against, listed
+  in the **Approved screens** table (`reference.md` §11). A passing case proves a
+  string is present; it proves nothing about a control that scrolled off its card or
+  a contrast that fails in dark mode. A runbook with no images leaves no record of
+  what the page is supposed to look like, so a human tester has nothing to compare
+  against and a reviewer cannot tell a change from a regression. Capture **after**
+  the user signs off, and re-shoot whenever a change alters the rendering.
 - **Fit the architecture — delete what the app cannot have.** This template
   originated in an offline-first app; its sync/dirty-badge/local-store/
   two-profile-conflict/tombstone mechanics apply **only** to that architecture
@@ -183,6 +199,7 @@ regressions — and the skill compounds so each area is cheaper than the last.
 | Harness run command, fixtures API, form-control gotchas | `reference.md` §8 |
 | Test-case ID scheme | `reference.md` §9 |
 | Self-improvement procedure (dual target, sidecar format, fold-in) | `reference.md` §10 |
+| **Approved screens: what to shoot, naming, when to re-shoot** | `reference.md` §11 |
 | Coverage ledger schema + discovery procedure | `discovery.md` |
 | Blank area template | `template-runbook.md` |
 | Per-repo profile skeleton | `template-profile.md` |
@@ -236,3 +253,12 @@ regressions — and the skill compounds so each area is cheaper than the last.
 - Not feeding run learnings back into the skill — each run's generalizable
   gotchas go into `reference.md` (and `~/.claude/regression-runbooks/lessons.md`)
   so the next area and the next repo benefit.
+- **Shipping a runbook with no approved screens, or shooting them before sign-off.**
+  Both leave the same hole: no record of what the page is meant to look like. The
+  early-shot version is worse, because it looks complete while showing a UI that has
+  since changed. Capture after the user accepts the look, and re-shoot whenever a
+  change alters the rendering, including a copy or casing edit (§11).
+- **Capturing a screenshot without clearing `sessionStorage` / `localStorage` first.**
+  Client-side storage survives navigation, so a marker left by a previous capture
+  renders a *different state* than the one you meant to shoot, and the image lands
+  under the right filename showing the wrong thing.

@@ -1302,3 +1302,91 @@ indefinitely.
 
 Record in the runbook's Self-improving log: `"Skill reviewed — no generalizable
 lesson this run."` This confirms the step was not skipped.
+
+---
+
+## §11 Approved screens (the reference images)
+
+**Every runbook stores screenshots of its final, user-approved UI**, in
+`docs/runbooks/screenshots/<area>/`, and lists them in the runbook's **Approved
+screens** section. They are committed, so a human running the runbook on any
+profile sees what the page is supposed to look like instead of guessing.
+
+They exist for the failure mode no assertion catches: **a case can pass while the
+page looks wrong.** A locator confirms a string is present; it says nothing about
+a control that scrolled off its card, a contrast ratio that fails in dark mode, or
+a stepper whose last step sits past the viewport edge. The image is the only
+artifact a human can check the layout against months later, and the only way a
+reviewer can tell "this changed" from "this regressed".
+
+### When to capture
+
+**After the user signs off on the UI, never before.** These are the *approved*
+screens, so the sequence is: review the area, make the fixes, screenshot, ask the
+user, and only once they have accepted the look do the images land in `docs/`.
+Shooting first commits a picture of something that is about to change, which is
+worse than having no picture: it looks complete while being wrong.
+
+Re-shoot the affected screens whenever a change alters what the page **looks like**
+for that state, and note it in the Run record. **A copy or casing edit counts.** It
+is one character in the diff and a different word on the button the reader actually
+sees, and it is the class of change that most often ships unshot because it files
+itself mentally as "not visual".
+
+### What to shoot
+
+One image per **state a case asserts against**, not one per case. Aim for the
+smallest set covering the area's distinct renderings:
+
+- The **primary surface** (the list, the form, the detail page) at a stated desktop width.
+- Each **distinct non-happy state** the area owns: the error, the empty, the
+  permission-denied, the mid-flow. These are where the defects live and where a
+  written step is hardest to picture.
+- Any state with a **known responsive or theme risk**, at the width or theme that is
+  risky. Shoot the breakpoint that broke, not a comfortable one.
+- Skip states that differ only in data. Two rows versus twenty is not a new screen.
+
+### Naming and storage
+
+`docs/runbooks/screenshots/<area>/<YYYY-MM-DD>-<nn>-<state>-<width>-<theme>.png`,
+e.g. `2026-08-04-01-idle-1440-dark.png`, `2026-08-04-04-idle-phone-dark.png`.
+
+- **The date leads**, so the folder listing shows at a glance which states were
+  re-shot in the latest pass and which are older vintage. On a partial re-shoot the
+  mixed dates are exactly the signal you want.
+- The **numeric prefix** fixes the reading order within a pass.
+- `<state>` reuses the vocabulary the runbook already uses for that state, so the
+  table maps to cases without explanation.
+- **One current image per state: replace, do not accumulate.** The previous version
+  lives in git history, which is where a before/after belongs; an accumulating folder
+  grows without bound and forces every historical row into the table.
+  ⚠️ The cost of the date prefix is that a re-shoot is a **rename**, so git records a
+  delete plus an add rather than a modify. Most hosts detect the rename, and
+  `git log --follow` on the new path still reaches the old one.
+
+⚠️ **Put the screenshots in a sibling folder; do not move the runbook markdown into
+a per-area folder to achieve the grouping.** A repo that has adopted this plugin
+typically has a parity guard globbing `docs/runbooks/*.md` **non-recursively**, plus
+a long tail of cross-references to `docs/runbooks/<area>.md` from other docs, specs
+and CI config. A sibling `screenshots/<area>/` gets the same grouping for none of
+that cost. Measure both numbers before proposing the restructure, and treat it as
+its own change if it is genuinely wanted.
+
+### The table
+
+The runbook's **Approved screens** section carries one row per image: the file, the
+state it shows, and the cases it backs. Pointing each image at its cases is what
+keeps the set honest: an image no case references is either a missing case or a
+stale screenshot, and both are worth knowing.
+
+### Capturing them
+
+Drive the **real running app**, never a mock or a component-test render. Any browser
+automation the harness offers will do. Two things to get right:
+
+- **Set the viewport explicitly** before shooting and put the width in the filename.
+  A screenshot with no stated width cannot be compared to anything later.
+- **Clear the client-side state that leaks between shots.** `sessionStorage` and
+  `localStorage` survive navigation, so a marker left by a previous capture silently
+  renders a *different state* than the one you meant to shoot. This has already
+  produced a screenshot of the wrong state filed under the right name.

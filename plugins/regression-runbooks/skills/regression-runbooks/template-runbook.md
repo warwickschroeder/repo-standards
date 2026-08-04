@@ -22,6 +22,7 @@ PLACEHOLDERS:
 
 **Area code:** `{{AREA}}` · **Nav:** {{nav group}} · **Routes:** `{{/route}}`
 **Entities / tables:** `{{entity}}` · **Feature/permission gate:** {{feature flag or role, or —}}
+**Approved screens:** [`screenshots/{{area}}/`](./screenshots/{{area}}/), the reference images every case is written against, captured {{YYYY-MM-DD}}
 
 > **Mechanics live in `reference.md` and `discovery.md`.**
 > Per-area files stay focused on this area's test cases. For login, state-reset,
@@ -517,6 +518,26 @@ stale data presented as current.
 
 <!-- If no gaps found, replace the table row with:
      "None identified — all interactive elements have stable accessible names." -->
+
+---
+
+## Approved screens
+
+<!-- One row per screen a case asserts against. Capture from the real running app
+     AFTER the user has signed off on the UI, into docs/runbooks/screenshots/<area>/.
+     Clear sessionStorage/localStorage between shots or a leftover marker renders the
+     wrong state. See reference.md §11 for what to shoot, naming, and when to re-shoot. -->
+
+Reference images in [`screenshots/{{area}}/`](./screenshots/{{area}}/), captured {{YYYY-MM-DD}} against `{{branch or commit}}`.
+
+Filenames are **date-prefixed**, so the folder listing shows at a glance which states were re-shot in the latest pass and which are older vintage. One current image per state: the previous version lives in git history, which is where a before/after belongs.
+
+| File | State | Cases |
+| --- | --- | --- |
+| `{{YYYY-MM-DD}}-01-{{state}}-{{width}}-{{theme}}.png` | {{what it shows}} | {{TC-{{AREA}}-S1}} |
+
+<!-- If the area genuinely has one rendering only, one row is correct. An image that
+     no case references is either a missing case or a stale screenshot. -->
 
 ---
 
