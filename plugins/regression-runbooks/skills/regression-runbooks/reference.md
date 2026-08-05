@@ -1400,6 +1400,120 @@ because it was phrased as impossibility rather than as a cost.
 - A **user-approved** deferral still needs re-approving when its reason
   evaporates. The approval was for the trade-off, not for the absence.
 
+#### A headline number computed from the fetch window, and the control that gives it away
+
+**2026-08-05, DrillLogify, Sync Hub.** The page's summary line read **"25 syncs · all successful"**
+over a log holding **53 syncs of which 5 had failed**. Neither calculation was wrong; the *input
+set* was the table's 50-row fetch window rather than the data. The one question people open that
+page for was answered confidently and incorrectly, and every gate in the repo was green.
+
+- **The tell is a control that changes a number it has no business changing.** Pressing "Load older
+  syncs" took the line to `53 syncs · 5 with failures`. **Whenever a page has a show-more, load-more
+  or paginate control, press it and watch every other number on the screen.** Any that move were
+  scoped to the fetch rather than to the data. This is a two-second check that finds a whole class.
+- **The fix pattern:** an *unlimited but narrow* read feeding the summary (nine columns, not the
+  whole entity, so the unbounded scan stays cheap) alongside the windowed read feeding the table,
+  with **one shared derivation** consumed by both so they cannot disagree. Two implementations of
+  "how many are there" is how the summary and the table below it came to state different numbers.
+- ⚠️ **The e2e assertion that matters is the INVARIANCE, not the count.** Assert the summary,
+  press the load-more control, and assert the summary is **unchanged**. A count assertion alone
+  passes happily against a page that still recomputes from the window.
+
+#### Summarising a multi-part operation by its last part
+
+**2026-08-05, DrillLogify, Sync Hub.** A "records up / records down" figure read the newest
+completed *pass*. The sync engine is pull-first, so the last pass of a healthy cycle is the upload,
+which downloads nothing by definition: the down count was **structurally zero** after every
+successful sync, printed directly above a table row saying otherwise.
+
+Any summary over an operation with phases must summarise **the operation**, not whichever phase
+finished last. The smell is a query ending `ORDER BY … DESC LIMIT 1` feeding a figure the UI
+presents as being about a whole unit of work.
+
+#### A conditional block keyed on the data you have, not on the reader's question
+
+**2026-08-05, DrillLogify, Sync Hub.** The "why did records fail" panel was gated on the presence of
+an error message. Every partly-failed run recorded before the app started storing reasons has a null
+one, so expanding a red "Failed 2" rendered **nothing at all**, which reads as a broken page rather
+than as missing data.
+
+- **Gate on the condition the reader is asking about** (did anything fail), and give the
+  data-absent case its own branch that says so.
+- Generalises to every "show the detail if we have it" block: **the absence of the detail is itself
+  information the reader needs**, especially where the summary already told them something happened.
+
+#### A repeated element identical on every row encodes nothing
+
+**2026-08-05, DrillLogify, Sync Hub.** Each expanded run rendered 46 chips naming every entity type
+the sync had examined. That list is a constant, so it was the same 46 names on every run, occupying
+roughly 40% of the panel and distinguishing nothing.
+
+Standing question when reviewing any list, chip row or detail block: **would this look different on
+a different record?** If not, collapse it to a count with the list behind a disclosure, or drop it.
+The variant of this that hides best is a block that *was* informative once and became constant when
+its source changed to a fixed set.
+
+#### A hand-written sum beside a hand-written map will drift, invisibly
+
+**2026-08-05, DrillLogify.** A counts function counted 45 entities, gave each a display label in a
+map, and then totalled them with a hand-written addition expression that omitted two of them. Both
+omitted entities were genuine, uploadable data. A device whose only pending work was one of them
+showed a **zero badge**, made its status page print "everything has been uploaded", and left the
+**pre-wipe data-safety guard with nothing to warn about**.
+
+- **Compute the total FROM the map**, so the thing deciding what the reader is *told about* is the
+  thing deciding what the reader is *counted*. Adding an entity then becomes one edit, not two.
+- ⚠️ **A test on a grand total cannot see one missing addend among forty.** Drive **one entity at a
+  time**: set that entity's count to 1 and every other to 0, then assert the total is 1. That test
+  fails on exactly the real bug, which is worth proving by re-introducing it once.
+
+#### A tooltip used as a gloss REPLACES the label unless you tell it to describe
+
+**2026-08-05, DrillLogify, Sync Hub.** A component-library tooltip with a string title puts that
+string on its child as `aria-label` unless a "describe" flag is set. `aria-label` is a **name**, not
+a description, so the glossed thing stops saying what it is: a table column announced *"Records sent
+from this device to the server."* and never said "Uploaded". Because a `columnheader` derives its
+name from its contents, the whole cell's name went with it.
+
+- **The defect is invisible to a browser review.** The tooltip worked, the label was on screen, the
+  page behaved correctly. Only a **role-plus-name query** could see it, and the case that ran one
+  was the first in the app's history to assert a column header by name.
+- ⚠️ **A unit test can actively document the defect.** The one here asserted
+  `getByLabelText(/out of the seats your license allows/)` with a comment explaining that a tooltip
+  becomes the accessible name. It passed for years. **When a test's comment explains a surprising
+  platform behaviour, check whether the behaviour is a bug rather than a fact.**
+- **Audit shape:** the app had three gloss primitives and only one had the flag. Whenever a
+  convention exists in more than one component, grep for the flag and count the ones that have it,
+  rather than reading the one you happen to be in.
+- ⚠️ **Testing the fix:** in the un-flagged form the tooltip sets **no `title` attribute at all**,
+  so an e2e check for one passes vacuously. Assert by hovering and reading the tooltip's own role.
+  And hover the **gloss span**, not its container: a right-aligned cell has empty padding at its
+  centre, which is where a hover action aims.
+
+#### Before reporting a missing convention, read the nearest page of the same shape
+
+**2026-08-05, DrillLogify, Sync Hub.** "This page has no breadcrumbs and no way back" looked like a
+clear miss against the 43 pages that carry a trail. It was wrong: the sibling in the same nav group
+has neither either, and the convention document is explicit that a trail is only for a page that
+**sits under** something. Both are top-level destinations.
+
+One grep of the nearest same-shaped page costs seconds. Reporting a convention violation that is not
+one costs the reviewer's trust in every other finding in the same list.
+
+#### A runbook's own reference tables can contradict the file they are in
+
+**2026-08-05, DrillLogify, Sync Hub.** The Testability-gaps table named the wrong ARIA role for a nav
+entry and recommended a positive control that the **same file's Self-improving log** records as
+having failed for being permission-gated. The spec was right on both counts. Every parity gate was
+clean, because ID-parity reads case ids and locator-parity reads button names, and **neither reads a
+markdown table**.
+
+This is the same blind spot as the "per-runbook automation notes drift" entry, one level up: there
+the notes go stale, here the *reference* material does, and reference material is what the next
+author copies from. **Re-derive the reference tables from the spec whenever you touch the file**, and
+treat an internal contradiction (table says X, Known-fragile says not-X) as the cheapest possible
+signal that one of them is rotten.
+
 #### A `placeholder` can name a control the developer thought they named
 
 **2026-08-05, DrillLogify.** A search field carried `aria-label="Search users"` as
