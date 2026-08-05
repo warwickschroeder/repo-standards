@@ -531,6 +531,53 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 
 ---
 
+#### An ownership note that lists only EXCLUSIONS leaves the inclusions uncounted
+
+**2026-08-05, DrillLogify Web.** A high-traffic shell runbook opened with three careful ownership exclusions — search belongs elsewhere, sync belongs elsewhere, the boot screens belong elsewhere — and never enumerated what it *did* own. A whole header control, an issues indicator carrying ten distinct issue kinds, a count badge and two severity levels, had **zero** coverage in any of the repo's 45 runbooks. Nobody had noticed, because every reader checked the three exclusions and found them correct.
+
+- **State the boundary in both directions.** An exclusions-only note is a list of things you have thought about; it says nothing about the remainder.
+- **State it most carefully where it reads oddly.** Several of those issue kinds are *about* sync, which is exactly why each reader assumed the sync runbook had them. Write the awkward sentence: "these conditions concern X, but the control is ours."
+- **Phase 4 reconciliation is what catches this**, and only if the ledger is built from the *source* rather than from the runbook's own framing. Enumerate the area's controls from the component tree, then map each to a case.
+
+#### A case whose `Expected` promises more than its spec asserts is invisible to an ID-based gate
+
+**2026-08-05, DrillLogify Web.** A theme-menu case's Expected column read "menu opens with Light, Dark, System, then a **Style** group of palette variants". The spec asserted the three mode items and nothing whatsoever about the group — no options, no switching, no persistence. Both CI parity gates reported clean, because one compares TC ids and the other compares button names, and **neither reads what an `Expected` cell claims**.
+
+- **When a case's Expected names something, check the spec asserts it.** The 1:1 gate proves a case has *a* test, never that the test does what the case says.
+- **This is the reverse-direction check** in Common mistakes: policing "every case has a test" is easy, and the half nobody polices is "every promise has an assertion".
+- **The fix is usually a new case**, not a bigger one: the promise was a second behaviour hiding inside a case about something else.
+
+#### A modal-based overlay portals OUT of its landmark at small breakpoints
+
+**2026-08-05, DrillLogify Web.** Below the mobile breakpoint the nav drawer swaps to the component library's `temporary` variant, which is a modal and therefore renders into `document.body` — outside the `navigation` landmark that every other case in the spec scopes to. The landmark-scoped locator matched **zero** elements and the click burned the full 240-second test timeout, while the drawer was plainly on screen and the identical locator worked on desktop.
+
+- **Verifying a locator on one layout proves nothing about the other**, even when a single component generates both. The live browser pass had missed it entirely, having queried the drawer's own class directly.
+- **Keep a second helper scoped to the surface itself** (the drawer paper, the dialog, the popover) and use it in every small-screen case. Say *why* in the helper's docstring, or the next author will "simplify" it back.
+- **The tell is a full-timeout failure on a control you can see in the failure screenshot.** That combination means the locator, not the app.
+
+#### Three assertion traps that each read as an app failure
+
+**2026-08-05, DrillLogify Web.** All three surfaced in one run, and all three were test bugs that looked like defects.
+
+- **A whole-element text match reads CONCATENATED text.** A menu's lines arrive glued together (`…Forge SoftwareEnterprise Plan…`), so a regex anchored with `\b` can never match. The plain-string form it replaced worked only because a string is matched as a substring. **Do not add word boundaries to a whole-element text assertion.**
+- **A tooltip stays mounted through its leave transition.** Hovering a second target briefly puts two on the page, so an unnamed `getByRole('tooltip')` trips strict mode on the *second* assertion while the first passed. Address them by role **and** name.
+- **A page snapshot attached to a failure is captured after it.** A geometry case that measured before its lazy route had rendered read a null heading, and its own evidence showed a fully rendered page. Wait on the page's own heading, not just on the shell around it.
+
+#### A menu that stays open removes its own trigger from the accessibility tree
+
+**2026-08-05, DrillLogify Web.** A theme picker was changed to apply live without dismissing, so its two axes (light/dark, and the palette family) could be compared. Two cases that asserted the trigger's accessible name — `Change theme, currently Light` — immediately failed, because the library's menu is a **modal**: while it is open the rest of the page is `aria-hidden`. The name updated correctly, somewhere no screen reader and no locator could reach.
+
+- **A trigger that carries state in its name cannot be the live feedback for a stay-open picker.** Assert the chosen item's selected state *inside* the menu, plus a document-level signal (a `data-` attribute, a computed colour), and assert the trigger's name only after the menu closes.
+- **Raise it as a design question, not only a test fix.** If that name was the only confirmation a non-sighted reader got, the change made the control *less* accessible; the in-menu selected state is what has to carry it instead.
+- **Same shape for any modal-backed surface**: while a dialog, menu or popover is open, assert what is inside it first, and treat everything behind it as absent.
+
+#### A `<footer>` inside `<main>` has no landmark role
+
+**2026-08-05, DrillLogify Web.** A runbook step told the tester to assert `contentinfo`. A `footer` element nested inside `main` (or `article`, or `section`) is **scoped**, so it exposes as a plain generic and that role can never appear. The spec passed regardless, because it happened to reach for a CSS element selector, so the two halves of a 1:1 pair disagreed and nothing said so.
+
+- **Only a `footer` that is a direct child of `body` is `contentinfo`.** The same rule governs `header` and `banner`.
+- **Prose in an `Expected` column is checked by nobody.** Roles, landmark names and exact strings written only in markdown drift freely; the gates read ids and button names.
+
 #### A preference is not covered until something READS it
 
 **2026-08-04, DrillLogify Web.** A "Compact View" switch on the user-settings page had a runbook case, a passing spec test, a stored key, and **no consumer anywhere in the codebase**. The control changed nothing; its green case proved only that a switch flips. Every layer of the net was satisfied because each layer only ever checked the layer beside it: the case asserted the control, the spec asserted the case, the parity gate asserted the ids.
