@@ -531,6 +531,47 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 
 ---
 
+#### A surface that pins its own background but not its own foreground is invisible in the other theme
+
+**2026-08-05, DrillLogify Web.** A sign-in page is deliberately dark in **both** light and dark themes, a ratified brand decision. The dev-persona menu on it pinned its paper to a hard-coded dark colour and left the item labels to take the theme's text colour. In light mode every label rendered near-black on near-black: **1.04:1**, measured. The menu looked empty. It had been that way for months.
+
+Nothing in the usual net can see it:
+
+- **A role query passes.** The text is in the DOM, so `getByRole('menuitem', { name })` resolves and clicks. In this repo the shared login fixture had clicked through that very menu in all 45 specs.
+- **A screenshot passes**, because it was taken in whichever theme the author's browser happened to be in. One theme is a coin-flip on missing it.
+- **A contrast unit test passes**, because each component's own tokens are fine in isolation. The failure exists only in the *combination* of a fixed background and a themed foreground.
+
+What to do:
+
+- **Grep any theme-independent surface for a hard-coded background.** In MUI that is `bgcolor:` / `backgroundColor:` inside `slotProps.paper`, a `Menu`, `Popover`, `Dialog`, or a branded panel. Every hit needs its text and icon colours pinned **in the same block**. A pinned background with unpinned foreground is the defect.
+- **The case must assert computed colours, not text.** Set the theme preference **before the app boots** — most theme providers read storage in a state initialiser, so setting it afterwards does nothing — then read `getComputedStyle(el).color` for each affected element, in both themes. Asserting the element is visible proves nothing: it always was, just not to a human.
+- **Generalise the shape:** any state a *user preference* controls is a second axis your cases must cross, and theme is the one nobody crosses, because the author only ever sees their own.
+
+#### A parent route wrapper's redirect beats a child handler's `navigate()`
+
+**2026-08-05, DrillLogify Web.** A sign-in handler read a saved "where you were heading" destination and called `navigate(destination)`. Signing in also updates auth state, which re-renders the **parent** public-route wrapper, whose `<Navigate to="/" replace />` runs as an effect after commit and therefore lands last. The user arrived at the dashboard.
+
+The misleading part is the evidence: the destination had been read **and cleared**, so the store looked right, the feature looked implemented, and only the final URL disagreed. It had stayed invisible because the handler and the wrapper happened to choose the same target until one of them stopped.
+
+- **Whichever route wrapper owns the post-auth redirect owns the destination.** Put the decision there and delete the handler's navigate. Two things steering one navigation is the bug.
+- **The case needs a negative control.** Assert that a deep link lands on the deep link, *and* that a plain sign-in with nothing saved still lands on the default. Without the second, a wrapper that always replays a stale destination reads as a pass.
+
+#### A copy-parity gate that greps the whole source cannot tell user copy from a log line
+
+**2026-08-05, DrillLogify Web.** A gate exists to stop a spec waiting on an outcome message the app never says; it checks whether the phrase appears anywhere under `src/`. The phrase `Updated to version` was satisfied by two `console.log` template strings in unrelated services, so the gate would have passed with the user-facing message deleted entirely.
+
+- **A containment check over all source is a staleness detector, never an existence proof.** Read a green result as "not obviously wrong", and say so where the runbook cites the gate.
+- **Write the copy as one contiguous literal** where a gate is meant to check it. Splitting a phrase for emphasis (`Updated to <strong>version {x}</strong>`) removes the only thing the gate could match; moving the emphasis (`Updated to version <strong>{x}</strong>`) keeps both the design and the check.
+
+#### A destructive-action case must re-seed the harness's own settings afterwards
+
+**2026-08-05, DrillLogify Web.** A "wipe local data" recovery action clears every storage key carrying the app's prefix. That includes the key the harness writes to hold **background sync off** for the duration of a test, and the service's built-in default is on. So the case that wiped the device and then asserted the device was empty was racing a background sync that would refill it.
+
+**It passed.** That is the whole lesson: the race was won, not avoided, and a green result on a racy assertion is indistinguishable from a green result on a sound one. It was caught by reading the wipe's implementation, not by running anything.
+
+- **After any case that resets storage, re-apply whatever the fixture applied**, then continue. Put the re-seed in the runbook as a numbered step with *why* on it, or the next author deletes it as noise.
+- **Ask of every destructive case: what did the fixture put in the place I just emptied?** Refresh intervals, feature flags, view preferences and seeded sessions usually live in the same store as the data.
+
 #### An ownership note that lists only EXCLUSIONS leaves the inclusions uncounted
 
 **2026-08-05, DrillLogify Web.** A high-traffic shell runbook opened with three careful ownership exclusions — search belongs elsewhere, sync belongs elsewhere, the boot screens belong elsewhere — and never enumerated what it *did* own. A whole header control, an issues indicator carrying ten distinct issue kinds, a count badge and two severity levels, had **zero** coverage in any of the repo's 45 runbooks. Nobody had noticed, because every reader checked the three exclusions and found them correct.
