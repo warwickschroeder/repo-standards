@@ -1356,6 +1356,78 @@ value; `scrollHeight > clientHeight` on both a scroll container and its intended
 child; the accessible name via `aria-label`, or the label's text with
 `aria-hidden` subtrees excluded.
 
+#### A runbook STEP is a claim about the spec, and the parity gate cannot see it
+
+**2026-08-05, DrillLogify.** A seven-case runbook was audited against its own
+spec. Three of its steps were false:
+
+- a step promising the table's **six** column headers, where the spec asserted one;
+- a scope note saying the seat-limit warning was "asserted not-fired", where the
+  spec contained no seat assertion at all;
+- a step listing **three** role descriptions, where the spec asserted two.
+
+Every one reads as coverage to anyone skimming the runbook, and every one passed
+the repo's runbook↔spec parity gate, because that gate matches **case IDs**. It
+has no view of whether a case does what its own steps say. This is the same blind
+spot as the `Preconditions` trap (a case whose stated setup the spec never
+implements), one level lower down: there the setup is missing, here the
+assertions are thinner than advertised.
+
+- **When auditing an existing runbook, read the spec beside it, case by case.**
+  Re-reading the runbook can only ever confirm what it already claims.
+- **The over-promise is always in the same direction**: the prose enumerates and
+  the spec spot-checks. Grep the spec for each concrete noun the step lists.
+- **A step that says "asserted not-fired" is the highest-risk shape**, because a
+  negative assertion is invisible when absent and vacuous when miswritten.
+
+#### A deferral phrased as impossibility outlives the thing that made it true
+
+**2026-08-05, DrillLogify.** A runbook deferred role-gating coverage with a
+structural reason: *"the harness logs in with all roles, so it cannot reproduce a
+role redirect."* True when written. By the time it was inherited, the harness
+login helper had taken a persona argument for months, and a **sibling spec in the
+same directory already proved a route guard that way**, complete with a positive
+control. Nothing announced the change, and the deferral had hardened into a fact
+because it was phrased as impossibility rather than as a cost.
+
+- **Re-derive the premise of any inherited deferral before honouring it**,
+  especially one worded as "structurally cannot". Grep the fixtures for the
+  capability it says is missing, and grep the sibling specs for anything shaped
+  like the case it declined.
+- **Write a deferral with its expiry condition attached**: name the fixture or
+  capability whose arrival makes it obsolete, so the next reader knows what to
+  check rather than having to disprove an absolute.
+- A **user-approved** deferral still needs re-approving when its reason
+  evaporates. The approval was for the trade-off, not for the absence.
+
+#### A `placeholder` can name a control the developer thought they named
+
+**2026-08-05, DrillLogify.** A search field carried `aria-label="Search users"` as
+a top-level prop on the component library's text field. That lands on the wrapper
+element; the `<input>` itself was left with **no** accessible name, so the field
+was nameless to a screen reader.
+
+The e2e tier said otherwise. Because the field also had
+`placeholder="Search users by name, email, or role..."`, the accessible-name
+computation fell back to the placeholder, and the runner's `name` matching is
+**substring**, so `getByRole('textbox', { name: 'Search users' })` matched and the
+case went green. A sibling area's spec has been passing over the identical defect
+this way. The name it asserts is the placeholder; the case dies silently the day
+that copy is reworded, and the accessibility defect was never covered at all.
+
+- **A green `getByRole(role, { name })` is not evidence an `aria-label` is
+  wired.** Where the element has a placeholder, a title, or wrapping label text,
+  the name can come from any of them.
+- **Check the element, not the query**: assert the attribute sits on the control
+  itself, or add a component test. Component-tier name resolution (jsdom plus
+  `dom-accessibility-api`) does **not** fall back to `placeholder` for a label
+  query, so the unit tier catches what the e2e tier cannot. Here two new
+  component tests failed on it immediately, with the typing helper silently
+  typing into a `div`.
+- **The general shape:** an assertion satisfiable by two different underlying
+  facts tests neither. Prefer the tier whose name resolution is strictest for the
+  property you actually care about.
+
 ---
 
 ## §9 Test-case ID scheme
