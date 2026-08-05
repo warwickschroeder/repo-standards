@@ -1,6 +1,6 @@
 {
   "name": "regression-runbooks",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Exhaustively explore a web-app area and author tiered regression runbooks that drive manual and automated testing, deriving every field from the repo's source-of-truth and verifying persistence. Self-improves after every run.",
   "author": {
     "name": "Warwick Schroeder",

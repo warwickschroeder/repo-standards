@@ -1588,6 +1588,79 @@ has neither either, and the convention document is explicit that a trail is only
 One grep of the nearest same-shaped page costs seconds. Reporting a convention violation that is not
 one costs the reviewer's trust in every other finding in the same list.
 
+#### A number and its trend indicator can come from different sources and still look right
+
+**2026-08-05, DrillLogify, Dashboard.** A KPI tile's value was metres **logged** in the last 7 days.
+The ↑/↓ percentage in its top-right corner was the week-on-week change in metres **drilled**, from a
+different aggregate over a different table. Nothing threw, both numbers were individually correct,
+and the pairing was entirely plausible: logging and drilling move together most weeks.
+
+The case covering that tile asserted its **value**. That is the shape of the miss.
+
+- **A tile is not one number.** It is a value, a trend, a subtitle, a progress bar and sometimes a
+  sparkline, and each can be wired to a different query. Trace **every** adornment to its source
+  separately, and write the source into the runbook's field-reference row so the next reader can
+  check the pairing without reading the component.
+- **A shared component that renders a unit is a contract about what may be passed to it.** The same
+  page handed a *count* to a chip whose only job is to format `{value}%`, so three new records read
+  **"↑ 3%"**. Name the unit in the component's prop or its type (`pct` versus `count`), and give the
+  count its own component rather than reusing the percentage one.
+- **Assert the absence of the wrong unit, not the presence of the right number.** The existing case
+  used `toContainText('1')`, which the tile's own value satisfied, so the broken version passed. What
+  catches it is `not.toContainText('%')`.
+- **The tell is a value and its adornment described by different nouns** anywhere in the source: a
+  field called `metresTrendPct` feeding a tile labelled "logged". Grep the render for every state
+  field it reads and check they are all about the same thing.
+
+#### An accessible name has spaces the `textContent` does not, and composing a name re-opens collisions an exact match had closed
+
+**2026-08-05, DrillLogify, Dashboard.** Two `role=button` elements on one page carried the same
+visible label: a KPI tile and a summary chip. The chip renders its label and its count as two
+sibling spans, so:
+
+- its **`textContent`** is `Drill Holes1` — no space, because there is no whitespace between the
+  spans in the DOM;
+- its **accessible name** is `Drill Holes 1` — with a space, because the name computation inserts
+  one when it joins the contributions of two elements.
+
+The tile's locator had been `{ name: 'Drill Holes', exact: true }`, which excluded the chip **purely
+because of that space**. Then the tile's name was composed to carry its numbers (a good a11y fix),
+`exact` stopped being possible, and the obvious replacement `/^Drill Holes/` matched **both**. Strict
+mode caught it on the first run, but the reason is not obvious from either element.
+
+- **A name-based regex and a text-based regex disagree about whitespace on the same element.** If a
+  filter works as `hasText: /^Label\d+$/` and fails as `name: /^Label\d+$/`, this is why.
+- **Whenever you make an element's accessible name longer or composed, re-check every locator that
+  used to rely on `exact` to exclude a sibling.** `exact: true` is doing more work than it looks:
+  it excludes by whole-string equality, and a composed name removes that lever entirely.
+- **Anchor on the punctuation the composition introduces** (`/^Label, /`), not on the shared label.
+  It is the one part that distinguishes the two, and it documents the name's shape.
+- **The general form: a fix that changes an accessible name is a change to every selector in the
+  suite that reads it**, including the ones in other areas' specs. Grep for the label before landing
+  it.
+
+#### A deferral that reads as "not covered yet" can be masking a state the app cannot reach
+
+**2026-08-05, DrillLogify, Dashboard.** A runbook listed a four-step onboarding stepper advancing
+through its steps as out of scope, with a plausible cost as the reason: *"reaching step 4 means
+creating a project, a hole, a log and a workspace inside one case."* The real reason it was uncovered
+is that the card was gated on the **exact condition that pinned the stepper to its first step**, so
+steps 2 to 4 were unreachable code and the card vanished the moment step 1 was completed. The
+onboarding guide abandoned every new customer after one step, and had done for as long as it had
+existed.
+
+The deferral read as a **cost** and was an **impossibility**, which hid a defect behind a decision
+somebody had already accepted.
+
+- **For every deferral, ask what state the app must be in for the case to be reachable, then check
+  the gate actually permits that state.** Two conditions in one file were written as "not covered
+  yet" and were "cannot happen".
+- **A deferral whose stated cost is "several creates in one case" deserves the check most**, because
+  that reason is always true and therefore never evidence of anything.
+- This is the **mirror** of the entry above on a deferral *phrased* as impossibility that has since
+  become possible. Both directions cost the same, and the fix is the same: re-derive the premise
+  rather than re-reading the sentence.
+
 #### A runbook's own reference tables can contradict the file they are in
 
 **2026-08-05, DrillLogify, Sync Hub.** The Testability-gaps table named the wrong ARIA role for a nav
