@@ -1842,6 +1842,89 @@ That is the trap: the assertion was satisfied by the very mechanism that was hid
 
 ---
 
+#### Exercise the primary control with the KEYBOARD, once, per area
+
+**2026-08-06, DrillLogify Web.** The only way into an import page was a drop zone rendered as a
+bare `<div>`: no `role`, no `tabindex`, no accessible name, and the real `<input type="file">` sat
+at `display: none`. So the first step of the sole path through the page **could not be done without
+a mouse**, and had never been possible. A 37-case suite passed 37/37 over it.
+
+- **Nothing programmatic could see it.** The element rendered, the click handler worked, the copy
+  was correct, the console was clean, and no locator failed, because no case ever tried to reach it
+  by keyboard. The accessibility tree simply had no button in it.
+- **Two `Tab` presses found it.** This extends the "exercise the control" rule from *clicking* to
+  *tabbing*: for each area, tab to its primary control once and press `Enter`.
+- **The case is cheap and stable.** Assert the control resolves as a named `button`, that focus
+  lands on it, and that `Enter` produces the same observable effect as a click. For a file picker,
+  wait on the runner's `filechooser` event: the native dialog is browser chrome, so nothing in the
+  DOM moves when it opens.
+
+---
+
+#### An affordance named in the copy is a claim, and claims in copy need a case
+
+**2026-08-06, DrillLogify Web.** An upload area read *"Click to select a file or drag and drop"*.
+There was no `onDrop`, no `onDragOver` and no `dataTransfer` anywhere in the page, and there never
+had been. Months of green runs never noticed, because no case ever tried to drop anything.
+
+- **Grep a page's copy for the affordances it promises, then check each has a handler**, the same
+  way the coverage map checks each branch has a case. "drag", "drop", "paste", "swipe", "double
+  click", "right click" and "keyboard shortcut" are the words worth grepping.
+- The automated half is reachable without OS support: build a `DataTransfer` in the page and
+  dispatch `drop` at the element. That exercises the real handler, which is what is under test; the
+  operating-system half belongs to the browser.
+
+---
+
+#### A casing or copy sweep is invisible to a locator gate wherever the assertion is a REGEX
+
+**2026-08-06, DrillLogify Web.** A page-wide sentence-case sweep updated every string literal the
+build gates understand. Two cases still failed, on
+`getByText(/Overlapping (Depth |Sample )?Intervals/)`: a capital `I`, no `/i` flag, and **no gate
+reads a text regex**. One gate checks button names, another checks outcome copy, and a regex on a
+table title is neither.
+
+- **After any copy or casing change, grep the specs for the regex forms too**, not just the quoted
+  literals. Escaped forms hide as well: one assertion survived a literal sweep as
+  `/Failed Rows \(Required Fields \/ Invalid Codes\)/`.
+- **A permissive either-or regex is worth replacing while you are there.** That one accepted the
+  sample table *or* the depth table, so neither case could tell which one it got. Two cases, two
+  exact titles, and a mix-up becomes a failure instead of a pass.
+
+---
+
+#### A fixture value quoted in runbook PROSE is only as true as the last person who checked it
+
+**2026-08-06, DrillLogify Web.** A new case seeded a sample with the physical type named in an
+existing case's `Preconditions` line. That line said `CHIPS_CONE`; the case's own spec used
+`CORE_HQ`. The shared helper creates a **diamond** hole, and a chip type on a diamond hole is
+rejected for the hole's method before any other validation runs, so the new case never reached the
+table it was written to test.
+
+- **Prose has no gate.** The id-parity gate matches ids and the locator gate matches button names;
+  neither reads a `Preconditions` line, a field reference or a fixture value.
+- **Copy fixtures from the spec, not from the runbook**, and when the two disagree, the spec is the
+  one that has been executed. Fix the prose in the same change, or the next author inherits it.
+- Related trap, same run: an assertion of `<code>-2` for a de-duplicating suffix, because the
+  `while` loop opens with `suffix++`. The initialiser one line above said `suffix = 1`. **Read the
+  initialiser, not the loop body.**
+
+---
+
+#### Contrast that comes from an ALPHA must be measured in both themes
+
+**2026-08-06, DrillLogify Web.** A decorative chevron at `opacity: 0.65` measured **3.5:1** over the
+dark surface and **2.75:1** over the light one. It was approved from a dark screenshot, where it
+looked fine.
+
+- **The same alpha loses far more contrast over a light background than a dark one**, so a value
+  chosen in one theme is not evidence about the other.
+- **Measure the composited pixel, not the token.** `getComputedStyle().color` reports the colour
+  before the opacity is applied, so a naive ratio from the token overstates it. Composite it:
+  `o*fg + (1-o)*bg`, then compute against the same background.
+
+---
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated

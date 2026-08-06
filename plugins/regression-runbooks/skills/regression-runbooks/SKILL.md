@@ -278,6 +278,13 @@ regressions — and the skill compounds so each area is cheaper than the last.
   whole file untrustworthy. Worse, it can contradict the same file's own Run
   record a few lines above. Re-derive these notes from the specs (which TC IDs
   do they actually reference?) rather than editing them by hand.
+- **Trusting a copy sweep that the build gates called clean.** The gates read string *literals*:
+  button names, outcome messages, dialog titles. An assertion written as a **regex** is invisible to
+  all of them, so a casing change can leave a spec that cannot pass in a file every gate reports as
+  green. After any copy or casing change, grep the specs for regex forms as well as quoted strings.
+- **Taking a fixture value from a runbook's prose.** `Preconditions` lines, field references and
+  example CSV rows are ungated: no parity check reads them. Where a runbook's prose and its own
+  spec disagree, the spec is the half that has been executed. Copy from the spec and fix the prose.
 - Not feeding run learnings back into the skill — each run's generalizable
   gotchas go into `reference.md` (and `~/.claude/regression-runbooks/lessons.md`)
   so the next area and the next repo benefit.
