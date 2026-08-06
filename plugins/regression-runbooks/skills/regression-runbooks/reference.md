@@ -531,6 +531,30 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 
 ---
 
+#### A stated absence may name a MECHANISM, never an outcome
+
+**2026-08-06, DrillLogify Web.** A backup area's out-of-scope paragraph read: *"the automatic backup (every 30 min) and the rotation are background behaviours with no user-facing trigger, not automatable here."* Every word of that is true of the **30-minute timer**. None of it is true of the **list of five snapshots and their five restore buttons**, which are on screen whenever snapshots exist and which the same function the timer calls populates in about a second from a `page.evaluate`.
+
+The cost was measured. All five restore buttons carried the accessible name `Restore this backup`, so a screen reader announced five identical buttons and any role-plus-name locator resolved to five elements and died on strict mode. Nothing had ever tested them, because the runbook said they were untestable, and it said so because that one sentence conflated the trigger with everything downstream of it. The feature had shipped that way from the start.
+
+- **An absence may name a mechanism** — a timer, a debounce, a rotation policy, a retry, a network condition. **It may never name an outcome.** Before writing one, ask what the mechanism *produces* and whether that thing has a locator.
+- **Split the row rather than widening it:** `absent:the 30-minute interval` alongside `covered by T7/T8:the snapshot list it produces`. The reconciliation gate reads rows, so a split row is what makes the covered half visible.
+- **The tell when reviewing an inherited runbook:** an absence whose justification is about *how something is triggered* rather than about *what it renders*. Scheduled jobs, background syncs, cache warmers and cleanup passes all attract this shape.
+- Sits beside *"An 'out of scope' note is a claim with a shelf life"* below: that one is about a reason that expired, this one is about a reason that was never as broad as its wording.
+
+---
+
+#### A closing modal hides the page from role queries but not from text queries
+
+**2026-08-06, DrillLogify Web.** Three tests in one suite asserted a destructive action's outcome message (**passed**) and then a control on the surface behind the now-closed dialog (**failed**, "unable to find"). The dialog-closing state update had already run. The dialog was in its exit transition, and a mounted modal puts `aria-hidden` on its siblings: `getByRole` honours that, `getByText` does not.
+
+The failure is unusually hard to read, because the query that fails is on an element the query that just passed proved was rendered. It presents as a rendering bug in the component under test.
+
+- **After closing a dialog, wait for it to unmount before any role query on what was behind it.** `await expect(page.getByRole('dialog')).toHaveCount(0)` in Playwright; `await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())` in Testing Library. Put it in a named helper, because a confirm-then-check-the-page sequence is most destructive-action tests.
+- This is the *closing* case. The familiar advice — "a modal blocks the page, assert the dialog first" — covers a dialog that is **open**, which is when authors expect it. Nobody expects it after they have closed it.
+
+---
+
 #### A surface that pins its own background but not its own foreground is invisible in the other theme
 
 **2026-08-05, DrillLogify Web.** A sign-in page is deliberately dark in **both** light and dark themes, a ratified brand decision. The dev-persona menu on it pinned its paper to a hard-coded dark colour and left the item labels to take the theme's text colour. In light mode every label rendered near-black on near-black: **1.04:1**, measured. The menu looked empty. It had been that way for months.
