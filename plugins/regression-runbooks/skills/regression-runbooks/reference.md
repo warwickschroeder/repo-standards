@@ -1757,6 +1757,67 @@ The shape is worth naming because it is invisible in a green run and it is *caus
 
 ---
 
+#### "This is not rendered" is the one assertion an accessibility-tree query cannot make
+
+**2026-08-06, DrillLogify Web.** A page that rendered one card per record fell over on a real device carrying 1,304 of them, so the tables were collapsed into accordions to stop rendering what nobody had opened. The fix looked done and was not: the component library keeps a collapsed panel's children **mounted** and merely hides them, so 150 cards stayed in the DOM while every section read as closed. The unit assertion written to prove otherwise — "no radio is present" — **passed**, because both Testing Library and Playwright deliberately skip `visibility: hidden` content.
+
+That is the trap: the assertion was satisfied by the very mechanism that was hiding the problem, so the guard and the bug agreed with each other.
+
+- **When the claim is about absence of *rendering*, count nodes**: `container.querySelectorAll('table')` in a unit test, `page.locator('table').count()` in a spec. Role queries answer a different question ("is it in the interface"), and for hidden content the answer is no either way.
+- **Check the guard fails against the unfixed code.** Reverting the one prop and re-running the single case takes a minute and is the only thing separating a guard from a second copy of the same false negative.
+- Applies to any lazy-render claim: virtualised lists, tabs, collapsed panels, `hidden` sections.
+
+---
+
+#### A performance shape needs one case at the volume the worst real device carries
+
+**2026-08-06, DrillLogify Web.** Every case in an area's suite seeded **two** rows. On a real device the same page produced 1,306 tables, 3,040 radios, a 324,000px scroll region and a renderer that locked for over 30 seconds when scrolled. The suite could not have noticed: nothing it did was ever big.
+
+- **If a page renders one row, card or table per record, one case seeds the volume.** Ask what the worst real database holds, then seed that order of magnitude.
+- **Assert a countable consequence, not a duration.** Nodes rendered, cap respected, a "show more" control present. Timings are flaky and tell you nothing about why.
+- A bulk seed belongs in a batch/transaction helper, or the seed itself becomes the slow part of the suite.
+
+---
+
+#### A Testability-gaps row is a dated measurement, not a standing fact
+
+**2026-08-06, DrillLogify Web.** A runbook listed a role-based redirect as out of scope because "the harness logs in as one all-roles persona and structurally cannot reproduce a role-limited session". True when written. By the time it was read, the harness took a role argument, the repo's own runbook index recorded that deferral as **resolved**, and two other areas already ran their gate cases. The stale claim sat in an out-of-scope list, where prose reads as authority rather than as a note.
+
+- **Re-check every gap claim on each visit.** Most cost one grep against the harness or the fixtures.
+- **When a deferral is resolved centrally, grep the runbooks for its wording** and strike it there too. Otherwise the index and the runbooks disagree, and the reader believes whichever they opened.
+- Prefer wording that dates itself: "as of <date>, the harness cannot …" invites the check that "structurally cannot" forecloses.
+
+---
+
+#### A locator name that substring-matches a longer sibling inflates counts in silence
+
+**2026-08-06, DrillLogify Web.** Adding a bulk `Resolve all 3 groups` button broke three unrelated cases that counted `getByRole('button', { name: 'Resolve' })`: default name matching is substring, so 3 became 4. Nothing in the failure pointed at the new control, and a fourth case that *clicked* the same locator kept passing, because the first match was still the right element.
+
+- **When you add a bulk twin of an existing action, add `exact: true` to every count of the singular** in that area, in the same change.
+- **A count drifts silently where a click does not.** Expect the suite to fail in one place and lie in another.
+- **A label carrying a count needs an anchored regex** rather than a literal, or a build-time locator gate that only understands literals will report a label the app never renders verbatim.
+
+---
+
+#### A case that never ran cannot vouch for its own fixtures
+
+**2026-08-06, DrillLogify Web.** A seed helper minted primary keys like `AREA-1234-A`. The API rejects anything but a uuid with a 400. Nobody knew, because the runbook's "sync proof" was a manual step plus a citation to a test in another tier, and no automated case had ever uploaded those rows. The invalid fixture had been sitting in the helper for two months looking fine.
+
+- **A fixture is only validated by the layer that consumes it.** Local-only cases will happily accept data the server would refuse.
+- **If a runbook claims a round trip, one case must actually make it** — a citation to another tier documents the chain, it does not exercise this area's fixtures through it.
+- When a seed bypasses the app's own creation path (raw insert, direct DB write), it also bypasses the validation that would have caught this, so the round-trip case is the only thing left holding the shape.
+
+---
+
+#### A figure the page states about what an action will do deserves a case that recomputes it
+
+**2026-08-06, DrillLogify Web.** A summary tile read "Rows Affected 3040" for an action that would have deleted 1,730: one row per group is kept, so the figure overstated the damage by exactly the number of groups. No case asserted any tile, so the wrong number was as green as the right one would have been.
+
+- **Recompute the figure from the seed, in the case**, and pick a seed where the wrong arithmetic gives a different answer (here, groups of three, so "rows" and "rows minus groups" cannot coincide).
+- Any number a destructive control states about its own consequence is worth this: counts of what will be deleted, moved, overwritten or uploaded.
+
+---
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated
