@@ -126,6 +126,15 @@ regressions — and the skill compounds so each area is cheaper than the last.
 - **Tri-purpose:** a case that can't be run by a human on a second environment
   *and* expressed as an e2e step is incomplete. Use `getByRole(role, { name })`
   targets; flag missing accessible names as testability gaps.
+- **Every runbook carries a Coverage map, and a re-run reconciles before it runs.**
+  It is the only section that can say what is *not* covered, and without it a green
+  number has no denominator. The cost of skipping it is measured: an area whose
+  suite passed **10/10** was found the same day to hold five live defects — a
+  refusal rendering a heading that contradicted its own body, an error blaming the
+  user's connection for a server fault, an unvalidated session reaching the app —
+  every one of them in a branch no case owned, in a runbook with no Coverage map.
+  Re-deriving the branch list from the code **before** re-running turns the run
+  from a confirmation into a measurement.
 - **Every runbook ships approved screenshots of its final UI**, in
   `docs/runbooks/screenshots/<area>/`, one per state a case asserts against, listed
   in the **Approved screens** table (`reference.md` §11). A passing case proves a
@@ -233,6 +242,25 @@ regressions — and the skill compounds so each area is cheaper than the last.
   its own suite can still silently drop whole field groups, derived-UI,
   conditional-display flows, and exact validation strings that the older doc
   guaranteed. Diff and slot every concrete behaviour.
+- **Forcing a case's input with a payload you made up.** Where a case drives a
+  branch by faking a server response, the fake has to be the response the server
+  actually sends: open the endpoint's source and copy its literals, or capture one
+  real response. Three cases in one area were written against plausible invented
+  bodies, and the app itself carried a guard keyed to one of them — so the guard
+  had never once fired in production while its unit test, using the same invented
+  string, passed. A suite built on a fiction the code agrees with is green and
+  meaningless. Where you can, replace an exact-string branch with a rule.
+- **Recording an absence as "belongs with `<other>.md`" and never opening that
+  file.** A deferral is the one kind of absence that looks *more* rigorous than it
+  is, because it names a destination and the reader stops. Name the **case ID**
+  (`covered by X.md TC-FOO-F1`), which can be checked in seconds; a bare file
+  reference cannot be checked at all, and one such pointer hid a real defect for
+  months.
+- **Believing a note that says a case "doubles as" another branch.** A branch is
+  owned by an input, not by a shared outcome: two branches rendering the same
+  screen still need two cases, because what is under test is which branch ran.
+  One such note was wrong, and the branch it claimed to cover was where two live
+  defects were sitting.
 - **Carrying template scaffolding the app cannot have** — the commonest failure
   of this skill. Symptom: every runbook in the repo has the same `F2 — sync
   conflict + soft-delete propagation` heading whose body says "Absent, this app

@@ -1703,6 +1703,58 @@ that copy is reworded, and the accessibility defect was never covered at all.
   facts tests neither. Prefer the tier whose name resolution is strictest for the
   property you actually care about.
 
+#### A case that invents its input tests the app against a server that does not exist
+
+**2026-08-06, DrillLogify Web.** An access gate branches on whatever the login endpoint answers, and every case forced its branch by fulfilling that endpoint with a hand-written payload. Three of those payloads were plausible and none of them was real:
+
+- One case sent the message `"License expired"`. The API has only ever sent `"Organization license has expired."`
+- Another sent a seat-limit message containing a number. The API's carries none.
+- Worst, the **app** contained a de-duplication guard written to recognise the first of those invented strings. It suppressed a redundant sentence when the message was exactly `"license expired"` — so against the real server it had **never once fired**, and every genuine licence refusal showed the same sentence twice. The unit test for it passed, because the unit test used the invented string too.
+
+The suite was fully green throughout. It was measuring the app against a fiction that the tests and the code had agreed on.
+
+- **Open the endpoint's source and copy its literals.** Where the backend is a sibling repo you can read, the refusal catalogue, the error strings and the status codes are all right there. Where it is not, capture one real response and paste it in.
+- **Suspect any app-side branch keyed to an exact server string.** It is a claim about the wire, and the test covering it usually restates the same claim rather than checking it.
+- **Prefer a rule to a literal.** Replacing `message === "license expired"` with "append the server's sentence only when it carries a number or a date" removed the coupling entirely: no rewording upstream can break it.
+
+#### A cross-file deferral is not coverage until you open the other file
+
+**2026-08-06, DrillLogify Web.** An area's scope section recorded one branch as out of scope because "it belongs with the offline behaviour in `user-settings.md`". That runbook covers the offline **setting** thoroughly and does not cover the branch at all. The pointer had read as reassurance for months, and the branch turned out to hold a real defect: a session with a partial offline token reaching the app entirely unvalidated.
+
+A deferral is the one kind of absence that looks *more* rigorous than it is. It names a destination, so the reader stops.
+
+- **Name the case ID, not the file.** `covered by user-settings.md TC-PROFILE-F1` can be checked in seconds; `belongs with user-settings.md` cannot be checked at all.
+- **Verify it when you write it, and again whenever you re-run the area.** Both directions of the 1:1 rule apply across files too.
+
+#### "This case doubles as the default branch" is a claim, and it is usually wrong
+
+**2026-08-06, DrillLogify Web.** A case exercised a classifier's `deactivated` branch, and its note said that since anything unrecognised also falls through to the same screen, the case "doubles as the default branch". It does not: its input matches an **explicit** branch and never reaches the default. The default was exactly where two live wrong-screen defects were sitting.
+
+The note is the tell. A case that genuinely covers two branches takes two inputs.
+
+- **A branch is owned by an input, not by a shared outcome.** Two branches rendering the same screen still need two cases, because the thing under test is which branch was taken.
+- **Treat "also covers" in a runbook the way you would treat an untested assertion**: re-derive it from the code, and if it holds, say which input reaches which branch.
+
+#### A fully green suite is evidence about the suite
+
+**2026-08-06, DrillLogify Web.** An area's ten cases passed 10/10, and a review of the same area that afternoon found five live defects: two refusals routed to a screen contradicting their own message, an error blaming the user's internet for a server-side fault, an unvalidated session reaching the app, and no `h1` at all on a screen that replaces the entire app. Every one sat in a branch no case owned. The run record had read "all pass" for a week.
+
+This is the failure Phase 4's reconciliation gate exists to prevent, and the runbook had **no coverage map** — the one section that would have made the uncovered branches countable rather than invisible.
+
+- **The green number to distrust is the one with no denominator.** "10/10" means nothing without "and here are the area's 22 branches, each against the case that owns it".
+- **Write the coverage map even for a small area.** It costs a table, and it is the only artefact that can state what is *not* covered.
+- **When re-running an existing area, reconcile before you run.** Deriving the branch list from the code first turns the run from a confirmation into a measurement.
+
+#### A table-driven case that reuses one screen needs an assertion on something that changes every row
+
+**2026-08-06, DrillLogify Web.** A new case walked a server's eight refusal payloads through a single blocked screen, advancing with the screen's own retry button rather than reloading eight times, and asserted the resulting heading each round. Two pairs of rows map to the **same** heading, and one such pair is adjacent — so that row's assertion was satisfied by the previous row's screen still being on display. It would have passed whether or not the request was ever made.
+
+The shape is worth naming because it is invisible in a green run and it is *caused* by the optimisation: reloading per row would have made each round independent, and reusing the page is what made the previous state a valid answer.
+
+- **Assert on something that differs for every row**, not on the property the table happens to group by. Here that was the message; a status, a count or an id serves as well.
+- **Sort the table so identical outcomes are not adjacent** if you cannot assert a differing property — it narrows the window but does not close it, so treat it as a fallback.
+- **The general rule:** whenever a case advances state in place rather than resetting, ask what the assertion would do if the advance silently failed. If the answer is "pass", the assertion is measuring the previous step.
+
 ---
 
 ## §9 Test-case ID scheme
