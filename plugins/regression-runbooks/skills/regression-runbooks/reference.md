@@ -531,6 +531,66 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 
 ---
 
+#### Adding an `aria-label` to a CHILD pollutes the parent's name, wherever the parent is named from its contents
+
+**2026-08-07, DrillLogify Web.** Fixing one accessibility gap created another. A column-resize handle had no role and no name, so it was unreachable by keyboard; giving it `role="separator"` and `aria-label="Resize Project Name column"` fixed that and was verified working. But the handle is a child of the `<th>`, and `columnheader` takes its name **from its contents**, so every header in the grid started announcing as **"Project Name Resize Project Name column"**.
+
+The cost was six failing cases in one run, four of them burning the full 240-second locator timeout, and a screen reader reading every column header twice over. The page looked and behaved perfectly throughout.
+
+- **The roles named from their contents are the trap**: `columnheader`, `rowheader`, `cell`, `button`, `link`, `heading`, `option`, `menuitem`, `gridcell`. Adding a *named* child to any of them changes the parent's name.
+- **Fix by pinning the parent's name** (`aria-label` on the container), not by removing the child's. An explicit label wins over name-from-contents, so the child keeps the name it needs and the parent stops absorbing it.
+- **The tell in a run is an ANCHORED regex that suddenly cannot match** while its unanchored sibling still passes: `/^Depth From$/` dies, `/Depth From/` survives. That asymmetry points straight at extra text in the name.
+- **Assert a name with `toHaveAccessibleName('<exact string>')`, not a loose regex**, precisely so this shows up as a diff of the whole name rather than a silent pass.
+- Generalises past testing: this is the same mechanism as a `Tooltip` relabelling its child, one level up.
+
+#### A list sized by the USER'S data freezes on real data, and every fixture hides it
+
+**2026-08-07, DrillLogify Web.** A column-filter menu rendered one checkbox row per distinct value in that column, with no length guard. The harness creates two or three rows per test, so the list was two items, the case was instant, and it passed on every run for months.
+
+Driven against the developer database, the same menu on a column holding **6,912** distinct values took the page from **5,514 to 53,964 DOM nodes** and about **17 seconds** to open. On a column holding **8,518**, it hung the renderer past a 45-second tool timeout. Capping the list at 200, with a line naming the count and how to narrow, took it to **+140 nodes**.
+
+- **No e2e fixture in any repo can see this**, because the whole point of a fixture is a small, controlled dataset. It is found only by driving a database with real volume, which is an argument for the browser pass rather than for a bigger fixture.
+- **The tell is a `.map()` over a derived set inside a popover, menu or dropdown, with no length guard.** Grep for `distinct`, `unique`, `new Set(` feeding JSX.
+- **Write the case against the CAP, not the freeze.** A case cannot seed 8,000 rows in reasonable time, so assert the two things that are cheap: that a small column still lists its values, and that the withheld-list wording appears with its explanation. Put the measured numbers in the runbook note so the next reader knows why the cap exists.
+- Generalises to anything whose length is a property of the data rather than of the UI: a group list, a tag picker, a legend, a per-row expansion.
+
+#### A query parameter with producers and no consumer fails silently, forever
+
+**2026-08-07, DrillLogify Web.** A dashboard linked to `/database?table=<name>` from every record-type chip. The target page never read the parameter, so every chip landed on whichever table happened to be first. No error, no console line, no failing test, and the area's runbook described the deep links as working, which is how the claim survived being false.
+
+- **Grep a parameter's PRODUCERS as well as its consumer.** One `grep -rn "?param=" src/` finds the links; the absence of the read in the target is the other half of the answer.
+- **Check the producer's value space exists in the consumer.** Two of the chipped record types had no destination at all, so those links could never resolve even after the fix. That is a second finding, and a product question rather than a bug.
+- **A deep link needs a case for each way it can fail**, not just the happy one: the target exists, the target is empty, the target is unknown. The last two must *say so*, because silently showing something else is what makes the first failure invisible.
+
+#### A contrast probe that ignores the alpha channel over-reports by 4x
+
+**2026-08-07, DrillLogify Web.** A dark theme's muted token is `rgba(221, 232, 245, 0.4)`. Reading the first three channels as opaque reported **13.6:1**; composited against its real background it is **3.27:1**. The probe said the theme passed comfortably while three elements were failing AA.
+
+- **Composite before measuring:** `result = a*fg + (1-a)*bg`, against the nearest ancestor with a non-transparent background, then compute the ratio. A probe that parses `rgb()` and ignores a fourth channel is worse than no probe, because it produces a number that looks authoritative.
+- **Check both themes and expect light to be the worse one.** The assumption runs the other way and it was wrong here: the same three elements measured 2.43 / 2.59 / 2.59 in light against 3.30 / 3.27 / 3.27 in dark.
+- **Look for a *disabled* token used for content that is merely quiet** — a row-number gutter, a units hint, an absent-value glyph, a timestamp. Nothing about them is unavailable, and a disabled token is designed to recede below the readable threshold.
+
+#### "Read-only area" is a claim about the write calls, not a property of the name
+
+**2026-08-07, DrillLogify Web.** A runbook opened by declaring its area read-only, and used that to skip the entire persistence tier. One toolbar button created a row and navigated to it, and had done since before the runbook was written.
+
+- **Grep the page for repository or API writes before accepting the framing**, especially where the framing is what justifies skipping a tier. A framing that removes work is the one to check hardest.
+- **A read-only area still has an exhaustive Full case; it is just a different one.** With no form to reload values into, the both-ends round-trip has no second end. What must be exhaustive instead is the **rendering**: one case over one seeded table asserting that each value type (string, number, date, boolean, foreign key, enum, null) gets its own treatment. These are ordered branches in a single renderer, so a change to one can shadow another, and no single-type case can see that.
+
+#### Two counters over two mechanisms drift, and the noun they share is what hides it
+
+**2026-08-07, DrillLogify Web.** A "Columns" button badge read **9 hidden** while the menu it opens showed **7** unticked boxes, and a footer counted the other 2 separately as "2 empty columns hidden". Nothing was miscalculated: the badge's input was `total - rendered`, which silently folds in a second, unrelated hiding mechanism. Three numbers for two mechanisms, all using the word "hidden", all correct in isolation.
+
+- **When one noun labels two counters, assert them against each other in a case.** Read one number, open the thing it describes, count, compare. It is three lines, it needs no fixture, and it is the only check that can see this.
+- **The smell is a count derived by subtraction** rather than from the set it claims to describe. Count the thing; do not infer it from a difference.
+
+#### `stopPropagation` on a form control's key handler is a question about its parent
+
+**2026-08-07, DrillLogify Web.** A filter popover was built as a `role="menu"` containing text boxes and buttons, which are not valid menu children. Every input carried `onKeyDown={e => e.stopPropagation()}` so the menu's type-ahead would stop eating keystrokes, and the container logged a library error on **every single open**, in a page nobody had read the console on. Rebuilding it as a popover with a real menu list wrapping only the menu-shaped actions deleted every one of those calls.
+
+- **Read a `stopPropagation` on a keyboard handler as a smell, not a fix.** It usually means a control is inside a container whose keyboard model does not expect it.
+- ⚠️ **The conversion changes roles, so re-derive every locator in the area.** What stays in the list keeps `menuitem`; what moves out does not. Controls can also *gain* accessible names they never had, which is a win but breaks any locator that worked around their absence.
+
 #### A stated absence may name a MECHANISM, never an outcome
 
 **2026-08-06, DrillLogify Web.** A backup area's out-of-scope paragraph read: *"the automatic backup (every 30 min) and the rotation are background behaviours with no user-facing trigger, not automatable here."* Every word of that is true of the **30-minute timer**. None of it is true of the **list of five snapshots and their five restore buttons**, which are on screen whenever snapshots exist and which the same function the timer calls populates in about a second from a `page.evaluate`.
@@ -1941,6 +2001,110 @@ Append new IDs; mark retired ones as `[REMOVED]` with a note.
 
 When an area owns two entities with distinct prefixes in one runbook, use two
 series: `TC-ORDER-S1`, `TC-LINE-S1`, etc.
+
+---
+
+#### Grep the repo's own UI-CONVENTIONS document for the page's FILENAME before starting
+
+**2026-08-07, DrillLogify Web.** Three of twelve defects found on one area review were already
+written down, by name, in the repo's own conventions file: a text input whose `aria-label` named
+the wrapper element instead of the input, seven floating-label dialog fields **with the exact
+count**, and two hand-rolled snackbars where the app has a single toast channel. Each entry ended
+"fix each as its area comes up for review", and the area review is the only thing that ever reads
+them. Nothing gates any of it.
+
+- **Do the grep in discovery, before the browser pass**, so known debt lands in the finding list
+  instead of being rediscovered as if it were new. It is one command per page file name.
+- **Resolving an entry means editing the paragraph too**, in the same change. Those lists carry
+  hand-maintained counts ("8 sites", "the remaining seven"), and a hand-maintained list of sites
+  goes stale in the direction that hides work.
+- Where a repo has no such document, the equivalent is its design/standards doc, its ADRs, or the
+  "known gaps" section of the profile. Ask what the repo writes debt down in, then read it.
+
+---
+
+#### A testability gap recorded as a locator workaround is often an A11Y DEFECT in disguise
+
+**2026-08-07, DrillLogify Web.** A runbook's Testability-gaps table said, truthfully, *"code-type
+nav: role-less list item (a div with an onClick); click it by its label text"*. What that sentence
+describes is a page on which **no keyboard user could open a single one of its thirty lists**. It
+had been written down, worked around, and re-read at every run for months, because the workaround
+made the spec pass.
+
+- **Read the gaps table as a defect list first and a selector list second.** Any row whose status is
+  "role-less", "no accessible name", "addressed by text" or "no ARIA" is describing something
+  assistive technology cannot use either.
+- The fix usually costs one component swap (an inert container to the library's button variant) and
+  turns the gap row green. ⚠️ It also changes every locator that reached the element, so the
+  runbook, the spec and the gaps table move together.
+- **Corollary for the run record:** a gap that has survived several runs is not a stable fact about
+  the framework. It is an unfixed defect that the suite has learned to route around.
+
+---
+
+#### A boolean whose registry never contains `false` is dead code, and it costs review time on every read
+
+**2026-08-07, DrillLogify Web.** A thirty-entry registry carried the same flag value on all thirty
+rows. The unreachable arm gated an info banner, a lock icon, a tooltip and an entire alternative
+data source; the reachable arm printed one word on thirty consecutive rows where it distinguished
+nothing. A dead-code gate cannot see any of it, because the markup is inline and the flag *is*
+read.
+
+- **The tell is the registry, not the code.** When you meet a flag during discovery, look at every
+  literal that sets it before reading the branch it guards.
+- **Delete the flag with the branch.** Leaving a field nothing reads is a different flavour of the
+  same debt, and the next reader has to re-derive that it is always true.
+- Record the unreachable arm as `absent:<reason>` in the Coverage map, so the deletion is evidenced
+  rather than merely asserted.
+
+---
+
+#### Ask what the DATA contains before trusting a hand-written registry of keys
+
+**2026-08-07, DrillLogify Web.** A page rendered its sections from a hand-written list of thirty
+keys. `SELECT DISTINCT <key column>` on the live database returned **thirty-one**: four rows sat
+under a key the list did not carry, so they had no route to any screen, could not be edited or
+deleted, and nothing told the reader they existed.
+
+- **Run the DISTINCT before writing the Coverage map.** One query turned "the registry looks
+  complete" into a defect with a row count attached.
+- **The fix is the query, not a longer list**: render `registry ∪ (distinct − registry)`, label the
+  remainder through the existing label map with a humanising fallback, and mark that section as a
+  problem rather than a feature. A future orphan then surfaces on its own.
+- Generalises to any surface rendering from a hand-written key list: table pickers, filter chips,
+  tab sets, nav registries, status legends.
+
+---
+
+#### A component library can render a HEADING you did not write, and only a DOM read finds it
+
+**2026-08-07, DrillLogify Web.** MUI's `AccordionSummary` wraps its content in a heading element of
+its own, so a heading level set on the typography *inside* it renders **both**: seven categories
+emitted fourteen headings, an `h3` around an `h6` with identical text. Every role-and-name query
+passes against either one, and the page looks perfect in a screenshot.
+
+- **Probe the outline directly**, scoped to the main landmark:
+  `[...document.querySelectorAll('main h1,main h2,main h3,main h4,main h5,main h6')]
+   .map(h => h.tagName + ':' + h.textContent.trim())`.
+- **Assert it as a list equality for one section**, e.g. `expect(matches).toEqual(['H3:Geology
+  Logging'])`. A presence check passes with the duplicate still there, which is how this survived.
+- The same shape appears wherever a library owns a wrapper you cannot see in the JSX: stepper
+  labels, card headers, dialog titles, tab panels. Check the outline once per area.
+
+---
+
+#### A message ASSEMBLED at runtime belongs in the copy gate's allow-list with a reason, never softened
+
+**2026-08-07, DrillLogify Web.** A page appends an outcome clause to whichever action just
+succeeded, because six actions times three outcomes would otherwise be eighteen literals. A gate
+that asks whether the asserted phrase exists anywhere in the source correctly reported the joined
+sentence as absent, and the joined sentence is still exactly what the reader sees.
+
+- **Assert the composed string and register the exemption with its reason.** Weakening the
+  assertion to the half that *is* a literal would have asserted the half that is a lie: "added"
+  without ", but it has not reached the server".
+- The reason matters more than the entry. A bare allow-list entry is indistinguishable from
+  silencing a true failure the next time someone reads it.
 
 ---
 
