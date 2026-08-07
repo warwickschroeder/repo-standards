@@ -531,6 +531,50 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 
 ---
 
+#### `getByRole` reads the ROLE ATTRIBUTE; the browser reads ARIA's ownership rules on top, and a green role query proves nothing about what a screen reader hears
+
+**2026-08-07, DrillLogify Web.** A grouped autocomplete nested each group's options inside a plain `<ul>` inside a **role-less** `<li>`, both direct children of `ul[role="listbox"]`. That breaks the listbox → option ownership ARIA requires, so Chrome **discarded** the `role="option"` the markup claimed and exposed **fifteen unnamed `listitem`s**, the three group headings as bare `generic`s, and `aria-activedescendant` pointing at something the browser did not consider selectable.
+
+The spec had been resolving `getByRole('option')` to fifteen elements since the day the feature shipped. The suite reported a healthy, navigable list. A screen reader got fifteen blank rows. **Nothing in the test tier could see it, and one assertion actively said the opposite.**
+
+- **The two resolvers are not the same thing.** Playwright (and Testing Library) compute a role largely from the attribute and the tag. The browser's accessibility tree then applies required-context and required-owned-element rules and can throw a role away. Where they disagree, the suite is the half that reports success.
+- **The tell is a role attribute whose parent chain does not permit it**: `option` outside a `listbox`, `gridcell`/`row` outside a `grid`, `tab` outside a `tablist`, `menuitem` outside a `menu`, `listitem` outside a `list`. Any component library that lets you group, virtualise, or wrap its list items can introduce one.
+- **The probe is a tree dump, not a role query.** Chrome DevTools' accessibility pane, or an MCP browser tool's verbose snapshot. Read the popup/subtree, not the page summary, which truncates it.
+- **What a spec CAN still assert is agreement.** Count the rendered rows with a CSS locator (`li[role="option"]`) and assert the role query returns the same number. That is inside the suite's reach and catches a regression in either direction, and it is what the runbook's exhaustive a11y case should carry.
+- **Record it as a Testability gap in the runbook**, explicitly saying the suite cannot see this class, so the next reader does not take a green run as proof.
+
+#### A result cap is invisible at fixture scale, and the fixture is exactly why it survives
+
+**2026-08-07, DrillLogify Web.** A search returned five matches per type and said nothing about the rest. Every harness test seeds two or three rows, so five was never reached and the cases would have passed forever. Against the real development database one query matched **28 holes, 1,711 samples and 9 batches** — the reader saw fifteen of 1,748, with nothing on screen admitting it.
+
+- **Ask the datastore what a realistic query returns before writing the coverage map.** One `SELECT COUNT(*)` turns "the list looks fine" into a defect with a ratio.
+- **A case that exercises a cap must seed PAST it.** Seeding five against a limit of five proves nothing; seed six so the group has something to withhold, and assert the withheld count, not just the shown one.
+- Same family as any list whose length is a property of the user's data rather than of the UI: pickers, filter menus, distinct-value lists, "recent items".
+
+#### "Loading" and "empty" are different slots, and copy in the wrong one is dead code that renders the library's default
+
+**2026-08-07, DrillLogify Web.** The app set `noOptionsText={loading ? 'Searching…' : 'No matches'}`. The library renders `loadingText` while loading and consults `noOptionsText` only once it is not, so the `Searching…` arm could never be reached and every reader saw the library's untranslated **`Loading…`**. The runbook described `Searching…` as observable behaviour.
+
+- **Sample a transient state over time rather than reading the settled one.** A 40 ms polling loop over the container's text content showed `Loading…` at 0 ms and the settled text at 308 ms. A single post-hoc assertion cannot see a state that has already gone.
+- **A ternary inside one slot is the tell** that the author expected that slot to handle both states. Check which slot the library actually renders for each state before writing the case.
+
+#### A keyboard shortcut registered on mount cannot be pressed straight after a navigation
+
+**2026-08-07, DrillLogify Web.** The only case to fail its first run did `goto` and immediately pressed the shortcut. `goto` resolves on load, well before the framework commits the component that registers the `window` listener, so the key reached a page that was not listening. It reads in the log exactly like a broken shortcut.
+
+- **Wait for something the component renders before sending it a key.** The sibling case in the same file passed only because it happened to click a heading first, which is an accident, not a design.
+- **A human never hits this**, because they cannot press a shortcut for a screen they have not seen — which is the general shape: any precondition the manual profile satisfies by being slow is one the automated profile has to state.
+- Put the wait in the **runbook step**, not just the spec, or the next author writes the race back in.
+
+#### "The behaviour stays here" is a coverage claim, and it needs a case here
+
+**2026-08-07, DrillLogify Web.** A runbook recorded that a control belonged to another area's case and that the *behaviour behind it* stayed in this one. The other area's case genuinely covered the control. Nothing in either file ever exercised the behaviour, so a whole entry point was uncovered while both documents read as though ownership had been settled.
+
+- This is the mirror of the known deferral trap. That one is a deferral naming a **file** instead of a case ID; this one **keeps** the half that nobody then writes.
+- **Both halves of a split need a case ID before the split is finished.** When you write "X is owned by `other.md` TC-…, Y stays here", the sentence is not complete until "here" names a TC too.
+
+---
+
 #### Adding an `aria-label` to a CHILD pollutes the parent's name, wherever the parent is named from its contents
 
 **2026-08-07, DrillLogify Web.** Fixing one accessibility gap created another. A column-resize handle had no role and no name, so it was unreachable by keyboard; giving it `role="separator"` and `aria-label="Resize Project Name column"` fixed that and was verified working. But the handle is a child of the `<th>`, and `columnheader` takes its name **from its contents**, so every header in the grid started announcing as **"Project Name Resize Project Name column"**.
