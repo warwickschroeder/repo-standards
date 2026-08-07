@@ -531,6 +531,50 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 
 ---
 
+#### A devtools audit hint is not a defect report, and "fixing" one can destroy an accessible name
+
+**2026-08-08, DrillLogify Web.** Chrome's issues panel reported *"A form field element should have an id or name attribute"* against a component-library `Select`. Adding `name` satisfied it. The library then derived a `buttonId` from that name and set it as **both** the element's `id` and its `aria-labelledby`, so the combobox labelled itself; `aria-labelledby` beats `aria-label`, and the control silently lost the name it already had. **Five cases died** on a `getByLabel` that had worked for months.
+
+- **Nothing in the usual net sees it.** The page renders correctly, the console is clean, the control works with a mouse and a keyboard, and the failure screenshot shows `combobox "Active project": <value>` looking perfect. Only a locator that resolves *by name* fails.
+- **Read what the hint is actually about.** This one concerns autofill and form serialisation, and the element it named was a hidden `aria-hidden="true"`, `tabIndex="-1"` input on a page with no form. The audit had nothing to say about the accessibility tree, which is what the change broke.
+- **The general shape is a self-referential `aria-labelledby`.** Any `aria-labelledby` whose target id is the element's own id computes the name from the element's contents, discarding an explicit `aria-label`. Grep for a component prop that generates an id, and check whether the library also points a labelling attribute at it.
+- **After any accessibility-flavoured change, re-assert the name**, with `toHaveAccessibleName('<exact string>')` rather than a role-plus-name query, so a broken name reads as a diff instead of a not-found.
+
+#### A "change the selection to X" case must first assert the value it is changing FROM
+
+**2026-08-08, DrillLogify Web.** A case opened a page, selected project X from a dropdown, and asserted the dropdown showed X. It passed while the control had never moved: the list was ordered newest-first, so X was **already selected** on load, and the component library fires **no `onChange` when you pick the option that is already picked** (MUI's `SelectInput` guards on `value !== newValue`). The handler never ran and nothing was persisted.
+
+- **Only the side-effect assertion caught it.** The case also read the storage key the handler writes, which came back `null`. Had it asserted the control alone — the obvious way to write it — it would have passed forever.
+- **The precondition is the fix.** Assert the value you are changing *from*, then change it. Without that the case asserts an end state without ever proving a transition, which is a tautology dressed as coverage.
+- **Pin the starting value explicitly** — a deep link, a seeded preference, a fixture — rather than relying on list ordering. The ordering lives in a repository query (`ORDER BY createdAt DESC` here) that nobody reads while writing a UI case, and it changes without the case's author hearing about it.
+- **Generalises to anything whose "set to X" is a no-op when already X**: tabs, filters, sort direction, theme pickers, radio groups, segmented controls.
+
+#### An area that owns no entities inherits every fixture, so it expires when a NEIGHBOUR changes
+
+**2026-08-08, DrillLogify Web.** A read-only board's case asserted that a newly created record showed one status. The create default had moved to a different value **three days after that runbook's last recorded run**, and the *neighbouring* runbook that owns the entity recorded the new value correctly the whole time. So two runbooks in one repo contradicted each other in prose for twelve days, and no gate reads prose.
+
+- **Diff the runbook's last-run date against `git log` for the entities it borrows, not just for its own page.** An area with no tables of its own has no changes of its own to look at, which is exactly why its author looks nowhere.
+- **Its expiry is the earliest change in any area it depends on**, so the check is a `git log --since=<last run> -- <each dependency>`, one line, run before writing anything.
+- **The tell when it bites is a status, label or default that another runbook already states differently.** Grep the sibling runbook for the same constant before trusting your own.
+
+#### Whenever one record hides another, write the case for the hider disappearing
+
+**2026-08-08, DrillLogify Web.** A board suppressed a parent card "in favour of" its child by testing whether a foreign key was set. When the child was cancelled it was filtered off the board, but the parent stayed suppressed — so **both** vanished, the emptiness check went true, and the page rendered *"No samples in the lab workflow yet"* over live work and real records.
+
+- **Suppress on "the other thing is actually rendered", never on "a foreign key is set".** The rule exists to stop one item appearing twice; with nothing else on screen there is nothing to appear twice.
+- **One rule covers every way the hider can go**: cancelled, soft-deleted, filtered out by a status rule, not yet downloaded, or belonging to a page the reader has scoped away.
+- **This was found by a case written blind**, purely because the coverage map carried a row for the cancelled branch and nothing owned it. It is the clearest argument for the map: the case was written from the branch list, not from a suspicion.
+
+#### Read the validator before seeding an edge case
+
+**2026-08-08, DrillLogify Web.** A fixture for "a rollup with no depth range" was rejected by the repository with `Sample depth interval is required`: depths may be omitted only for one narrow category of record. The rejection was the good outcome — a laxer repository would have created a row the app can never hold, and the case would have quietly tested a fiction.
+
+- **Prefer the domain scenario that legitimately produces the edge case.** Here a quality-control standard inserted into the sample stream, which is a real thing a geologist does and genuinely has no drilled interval, rather than a depthless core sample, which is not a thing at all.
+- **A seed that bypasses the app's own creation path also bypasses its validation**, so a raw insert would have hidden this. Seeding through the repository is what turned an invented fixture into the right one.
+- Related trap in the same case: an aggregate computed with `MIN`/`MAX` **across a group** means the edge-case row needs its own group, or a normal sibling supplies the value and the branch never renders.
+
+---
+
 #### `getByRole` reads the ROLE ATTRIBUTE; the browser reads ARIA's ownership rules on top, and a green role query proves nothing about what a screen reader hears
 
 **2026-08-07, DrillLogify Web.** A grouped autocomplete nested each group's options inside a plain `<ul>` inside a **role-less** `<li>`, both direct children of `ul[role="listbox"]`. That breaks the listbox → option ownership ARIA requires, so Chrome **discarded** the `role="option"` the markup claimed and exposed **fifteen unnamed `listitem`s**, the three group headings as bare `generic`s, and `aria-activedescendant` pointing at something the browser did not consider selectable.
