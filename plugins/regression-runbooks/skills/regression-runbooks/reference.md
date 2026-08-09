@@ -651,6 +651,46 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 
 ---
 
+#### Presence is not usability: a responsive case that asserts a heading vouches for a layout nobody can use
+
+**2026-08-09, Forge.Translation.** The mobile-breakpoint case signed in at 390×844 and asserted the library heading was visible. It passed for months while the sidebar held its fixed 248px column at **every** width, leaving **142px of a 390px viewport** for the page, which then scrolled sideways. The nav was using two thirds of the screen to say where you weren't, and the case was green because a heading is indeed present in an unusable layout.
+
+- **Assert geometry, not presence, for anything responsive.** Read it off the live page: `getBoundingClientRect().width` for the content region, and `scrollWidth > clientWidth` for the sideways scroll that is the real symptom. Check it with the nav both closed **and** open — an overlay keeps the content's width, a column steals it.
+- **The image is what found it, not the assertion.** This is the clearest argument for the approved-screens step (§11): capture the risky breakpoint, and look at it.
+- **The note beside the case had been asserting the opposite of the truth.** It claimed the sidebar "is collapsed at this breakpoint"; it was fully open. **A runbook note describing behaviour is a claim with no gate behind it** — re-derive such notes from the running app during a review rather than reading past them, because they are the one part of the file nothing can fail.
+
+#### An affordance you cannot assert is an affordance users cannot reach — the native `title` trap
+
+**2026-08-09, Forge.Translation.** Every explanatory hint on the users screen was a native `title` attribute, including the reason each disabled row was disabled. `title` never appears on keyboard focus, never appears on touch, waits about a second on hover, cannot be styled — and **cannot be asserted in a test or captured in a screenshot**. So it passed every gate and every review while being invisible to a large share of the people who needed it, the reviewer included.
+
+- **Treat "I can't write an assertion for this affordance" as evidence it doesn't reach users**, not as a testing inconvenience to route around with a DOM-attribute check.
+- **A hint on a DISABLED control can never open at all** — no pointer events, no focus. It has to sit *beside* the control as its own focusable button. A hover tooltip on the control is the intuitive fix and is dead on arrival.
+- Prefer a click/tap-opened affordance for anything a touch user must read; hover tooltips reach neither touch nor (for `title`) keyboard.
+
+#### A lookup table's plausible fallback is where its own bugs hide
+
+**2026-08-09, Forge.Translation.** The app shell mapped route → top-bar title, falling back to the product name. A route present in the nav but absent from the table therefore rendered the brand name in the top bar: wrong, daily-visible, and **indistinguishable from a deliberate choice**.
+
+- **Ask what a missing entry looks like to a reader.** If the answer is "fine", the fallback is a bug incubator — make a miss look broken (here: *"Page not found"*).
+- Doing so also lets the regression case be written as an **absence** (*the banner never reads "Page not found" on any nav route*) instead of a second copy of the table, which would drift from the first within a release.
+
+#### "Unreachable without a fault" is a reason to inject one fault, not to leave the branch uncovered
+
+**2026-08-09, Forge.Translation.** A list-unavailable panel and a failed-save toast had never once been rendered by any test: both exist *because* the server or network failed, and a backend that is up cannot be made to fail through the UI. They had quietly become permanently uncovered.
+
+- **One intercepted route per case reaches them**, with every other request still hitting the real API. That is not a return to a mock-backed suite; say so in the case so a later reader doesn't "clean it up".
+- **The valuable assertion is what happens to the CONTROL, not the error text.** A row still displaying the value the user chose after a failed save is worse than the failure, because they walk away believing it took. Assert the message *and* the revert *and* the re-enable.
+- Beware ordering: if an earlier step already loaded that screen successfully, a client cache will serve the good data and your injected fault never fires. Force a cold load so a real request is actually made.
+
+#### Contrast and computed-colour defects are invisible to looking, and two traps make measuring them wrong
+
+**2026-08-09, Forge.Translation.** The app's quiet-text token failed WCAG AA at every size it was used, in **both** themes (3.47:1 light, 4.35:1 dark, against a 4.5 floor) — column headers, row sub-labels, sidebar section labels. Invisible in every screenshot: a colour that looks tastefully quiet and a colour that fails AA are indistinguishable by eye.
+
+- **Read computed styles out of the running page and compute the ratio.** A design review that only looks is half a review.
+- **Trap 1: `getComputedStyle` returns modern colour functions unconverted** (`oklch(...)`, `lab(...)`). Parsing those numbers as RGB yields confident nonsense. Resolve through a canvas `fillStyle` round-trip instead.
+- **Trap 2: toggling a theme class and reading styles in the same tick captures values mid-`transition-colors`.** Let it settle first, or every number is a blend of the two themes.
+- Walk to the nearest non-transparent ancestor for the background, and fold any `opacity` on the element into the foreground before comparing — a disabled control at `opacity: 0.6` is not the colour its `color` property claims.
+
 #### A CSS `text-transform` defect is invisible to every text assertion, in every tier
 
 **2026-08-08, DrillLogify Web.** An assay table rendered its element columns through an uppercasing micro-label, so silver `Ag` displayed as `AG` and arsenic `As` as the English word `AS` — chemical symbols whose **case is their meaning**. It had shipped that way from day one.
