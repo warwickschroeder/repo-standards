@@ -651,6 +651,49 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 
 ---
 
+#### A utility class that shares a token's NAME but not its value leaves a control with no focus indicator
+
+**2026-08-09, Forge.Translation.** Four fields were styled `outline-none focus:border-accent`, which reads as "swap the browser ring for an accent border". In that app's theme `--color-accent` was mapped to `--surface-hover` (the brand accent being `primary`), so the browser ring was suppressed and the replacement border came out **quieter than the resting state**. Focused and unfocused were the same colour against the same backdrop, in both themes. It survived every code review, because the class list reads correctly, and every screenshot, because a screenshot never shows a focus ring you have not triggered.
+
+- **Measure the indicator on the live page.** Focus the control, then compare `outlineStyle`/`outlineWidth`, `boxShadow`, and the focused vs resting border colour against what is behind them. A focus state that changes nothing, or changes in the wrong direction, is the finding.
+- **Treat a utility/token name collision as its own defect class.** Before trusting any `*-accent`, `*-primary` or `*-muted` spelling, grep the theme mapping for what that name actually resolves to. The bug is invisible precisely because the code says the right word.
+- **Never accept `outline-none` without a replacement in the same class list.** That pairing is greppable across a repo in one command and is worth checking as a sweep, not one screen at a time.
+
+#### Hand-rolled empty and error panels converge, and then an outage reads as "nothing to do"
+
+**2026-08-09, Forge.Translation.** Eleven screens each styled their own "X is unavailable right now" card and their own empty card, and both had drifted into the same bordered grey panel with the same muted sentence. A reviewer meeting the error state sees an empty queue and goes home satisfied. §8's "four designs, not one" only holds if **one component** owns loading, empty and error: the error variant needs a distinct icon in the danger colour and `role="alert"`; the empty variant needs a subject icon and an invitation to act.
+
+- **The tell is countable before you look at anything.** `grep` one screen's unavailable sentence across the codebase; every extra hit is a state panel free to drift.
+- **Cover the states that a healthy backend cannot produce** by intercepting the request (see the fault-injection entry above), and assert the error text **and** the absence of the empty text, so the two can never collapse into each other again unnoticed.
+
+#### A response field no client reads is dead, and its only tests assert that it is
+
+**2026-08-09, Forge.Translation.** A queue endpoint ran a second query on every page load for the 20 most recent decided rows. No screen had rendered them since a searchable History tab replaced them, and the **only** tests naming the field asserted it was *not* rendered. A field whose entire coverage is `expect(...).toBeNull()` is a field to delete.
+
+- **When auditing an endpoint, grep the client for every response field.** The ones with no read site are dead weight that will rot silently, because nothing renders them and so nothing notices when they go wrong.
+- **Record the removal as an `absent:` row in the Coverage map**, with the reason, so the next reader does not helpfully re-add it "to save a request".
+
+#### A help affordance beside a field steals that field's accessible name
+
+**2026-08-09, Forge.Translation.** Adding a `Help: decided to` button next to a `Decided to` input made `getByLabelText(/decided to/i)` match two elements, and two green unit tests failed on strict mode the moment the tooltip landed. The accessibility improvement and the test break have the same cause: both resolve by name, and the new button carries the field's name as a substring.
+
+- **Name a help affordance after the question it answers, not the control it sits beside:** `Help: how the end of the range is counted`. It reads better aloud and it stops colliding.
+- Same family as any repeated per-row control: if a name can be a substring of a neighbour's, use `exact` or make the names disjoint from the start.
+
+#### A failure with no screenshot did not fail an assertion — re-run that one case first
+
+**2026-08-09, Forge.Translation.** A run reported `browserContext.close: Target page, context or browser has been closed` for one case. Its artifact folder held an `error-context.md` containing only that line and **no `test-failed-1.png`**, because there was no page state left to shoot. That shape is a teardown race, not a defect, and the case passed immediately on a single-case re-run.
+
+- Extends the standing rule (*read the failure screenshot before theorising*) with its complement: **screenshot present → open it first; screenshot absent → the failure happened outside the test body**, so re-run that one case before investigating anything.
+- A whole-suite failure of this shape, contiguous to the end of the run, is the orphaned-stack symptom instead — check for a listener on the app's port.
+
+#### A stub registered after the app has already refetched intercepts nothing
+
+**2026-08-09, Forge.Translation.** Switching persona re-identified every query and refetched immediately, and clicking the nav entry while already on that route did not remount it, so the "navigate like a user" helper issued no second request. The stub sat armed while the assertion ran against real rows, and the case failed with the app behaving correctly.
+
+- **Register the stub, then force one cold fetch** (`page.reload()`). A reload is the one place it beats in-app navigation, precisely because it re-issues every query.
+- **Prefer `route.fetch()` plus an override to a hand-written body.** The fake then keeps the server's real shape and changes only the field under test, so the case still fails when the contract moves — which a hand-written payload would hide (see *forcing a case's input with a payload you made up*).
+
 #### Presence is not usability: a responsive case that asserts a heading vouches for a layout nobody can use
 
 **2026-08-09, Forge.Translation.** The mobile-breakpoint case signed in at 390×844 and asserted the library heading was visible. It passed for months while the sidebar held its fixed 248px column at **every** width, leaving **142px of a 390px viewport** for the page, which then scrolled sideways. The nav was using two thirds of the screen to say where you weren't, and the case was green because a heading is indeed present in an unusable layout.
