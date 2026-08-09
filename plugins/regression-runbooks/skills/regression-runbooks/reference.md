@@ -69,9 +69,51 @@ three — only the **Setup** and the **verification lane** differ.
 
 Use the app's primary navigation (sidebar, top bar, breadcrumbs) to reach the
 area. Sub-entities typically nest under a parent's detail page — derive the URL
-pattern from the router (e.g. `/parents/:id/children/:childId`). In automated
-specs, prefer `page.goto(url)` over simulating nav clicks for setup; reserve
-UI navigation for cases that *test* navigation itself.
+pattern from the router (e.g. `/parents/:id/children/:childId`).
+
+⚠️ **Navigate the way a user does. `goto` is the exception, not the default.**
+Click the sidebar entry, the row link, the breadcrumb, the back button. Reach for
+`page.goto(url)` **only** when there is no in-app route to the state: the very first
+load of the run, a deep link that is itself under test, an error or not-found URL a
+user could only arrive at from outside, or a state the UI genuinely cannot reach.
+Everywhere else, clicking is both cheaper and a better test.
+
+*(An earlier version of this section said the opposite — that specs should prefer
+`goto` for setup and reserve clicking for cases that test navigation. That advice is
+withdrawn. It is wrong on all four counts below.)*
+
+- **`goto` is a full page load.** The SPA re-mounts, every provider re-runs, and in an
+  offline-first app the local database re-initialises from scratch. Measured on
+  DrillLogify 2026-08-09: a spec averaging ~2.5 `goto`s per test spent ~35 s of every
+  52 s test on boots. Clicking costs milliseconds.
+- **It makes waits flaky, and lies about why.** After a reload the control the next
+  step wants has not rendered, so a wait tuned on a warm page starts timing out — and
+  it fails on a *locator*, which reads as a selector problem and sends you looking in
+  entirely the wrong place.
+- **It is unwatchable.** A headed run blanks to white between steps, which reads as the
+  app reloading itself. The first thing anyone watching asks is why the page keeps
+  reloading, and the answer is that the spec is doing it.
+- **It tests less.** A `goto` skips the nav entry, the row link and the router wiring
+  that a real user goes through — the exact things that break. A spec that only ever
+  deep-links can be fully green while no one can reach the page.
+- ⚠️ **Worst of all, it silently COMPLETES whatever the previous step started**, so the
+  step under test is never observed. A reload dismisses dialogs, discards unsaved state
+  and resolves guards, and the case then passes on the reload's behaviour rather than the
+  action's. **Measured, DrillLogify 2026-08-09:** a case clicked *Cancel* on a
+  half-filled form and immediately `goto`'d the list. Cancel on a dirty form does not
+  close it — it raises a *"Discard unsaved changes?"* guard — and the reload destroyed
+  that dialog along with the form. So the case proved that *reloading* discards, never
+  that Cancel does, and **the discard guard had no coverage at any tier**: the one
+  control standing between a user and losing what they had just typed. It surfaced only
+  when the reload was replaced with a click.
+  **The tell: a case that navigates away immediately after the action it is testing is
+  asserting the navigation, not the action.** Look for `goto` on the line after the
+  interaction the case is named for.
+
+**Reset by navigating, not by reloading.** Where a spec used `goto` to get back to a
+known state, click back to it (the sidebar entry, the breadcrumb, the back control) and
+wait on a control unique to the destination. Where a case needs a specific record, click
+through the list to it rather than reconstructing its URL from an id.
 
 ### Control persistence explicitly — disable background refresh
 
@@ -435,7 +477,85 @@ npm run test:e2e -- --grep "TC-AREA-F1"     # one case (Playwright)
 npx cypress run --spec "cypress/e2e/area.cy.ts"  # Cypress
 ```
 
-Record the discovered command in the profile.
+Record **both** the full-suite command and the **single-case filter** in the
+profile. The second is the one you will actually spend the run in.
+
+### ⏱️ Re-run the CASES you fixed, not the suite
+
+**The full suite is a confirmation step, not a debugging tool.** Run it once at
+the end to prove nothing else moved; use a filtered run for every iteration in
+between.
+
+Measured 2026-08-08: a rebuilt 31-case suite came back 19/31. Fixing the
+failures and re-running everything took **31 minutes**, and then 31 again.
+Switching to `-g "TC-AXPL-T24|TC-AXPL-F5"` took the same fix-verify loop to
+**1.7 minutes** — **18x** — and surfaced a second, different failure inside one
+of those cases within two minutes instead of half an hour.
+
+- **The real cost is not wall-clock, it is batching.** A 31-minute loop pushes
+  you to bundle several speculative fixes into one run, so a red result cannot
+  be attributed to any one of them. A two-minute loop lets you change one thing
+  and learn one thing.
+- **Every runner has the flag:** `-g` / `--grep` (Playwright), `-t`
+  (Vitest/Jest), `--spec` (Cypress). Pipe several ids with `|`.
+- **Then run the whole area once at the end.** A filtered run cannot tell you a
+  fix broke a case you were not filtering for, which is exactly what a change to
+  a shared helper or a shared component does.
+
+### Read the failure screenshot before theorising about the failure
+
+Most runners save an image on failure (Playwright's `screenshot: 'only-on-failure'` writes
+one next to the error text). **Open it.** It is already on disk, it costs nothing, and it
+routinely answers in seconds what the error message alone gets wrong.
+
+**2026-08-09, DrillLogify.** A case failed on `dialog count expected 0, received 1` after
+clicking *Keep editing* on a discard guard. Reasoning from that line alone produced **two
+wrong fixes** and a suggestion that the app might be broken. The screenshot showed the guard
+open over an **empty** name field, which immediately located the failure at a *later* step
+than assumed and identified the real cause: clearing a field does not make a dirty form
+clean, because the dirty flag records that edits were *made*, not that content differs from
+its initial value. The app was correct throughout.
+
+⚠️ **And a person watching a headed run sees what no log contains.** In that same session
+the user caught a reload storm, a stalled run and a spec stuck on a popup — none of which
+appear in the text output until a multi-minute timeout finally fires. So: **run headed**,
+and **when someone says it looks stuck, go and look** rather than reasoning from the log. A
+stuck run is nearly always a locator waiting on something that will never appear, and the
+screen names the control.
+
+**2026-08-09, Forge.Translation.** The same mistake, the same cost, in a different repo. A case
+failed on `waiting for menuitem /delete/i`. Reasoning from that line alone produced "the list
+must be showing stale cached data" and a **60-second retry loop that could never have helped**,
+because it retried a state that was never going to change. The screenshot showed a **populated
+search box**: the list was in search mode, and search hits are mapped with `canDelete: false`,
+so the Delete item genuinely did not exist. One look would have replaced a wrong fix with the
+right one. Two independent repos, two wrong diagnoses, one lesson: the error text names the
+locator that missed, and **only the image says why**.
+
+### Escalate deliberately: screenshot → trace → live DevTools
+
+The screenshot answers most failures. When it does not, escalate in this order and stop as soon
+as you have the answer. Each rung costs more, and each is easy to reach for too early.
+
+1. **The screenshot.** Free, already on disk, whole-page state. Always first.
+2. **The trace.** `trace: 'retain-on-failure'` writes `trace.zip` beside the screenshot;
+   `npx playwright show-trace <path>` opens a DOM snapshot **per step**, plus the network log,
+   console output, and the locator each action actually resolved to. It is a recording of *the
+   failure that happened*, which is why it beats re-running by hand: a flake or a race may not
+   reproduce, and the trace has it either way. Reach for it when the question is "what was the
+   page like three steps before the error".
+3. **Live Chrome DevTools (the MCP server), driven by hand against the running app.** The only
+   rung that lets you *interact*: evaluate an expression, read an element's computed style,
+   watch a request as it is issued, test a hypothesis directly. Use it when the question needs
+   poking rather than looking: a response body, a console error with no visible symptom, a
+   layout question a still image cannot settle.
+
+**Two rules for rung 3.** It is a *diagnostic instrument only*, never how a check is run or a
+screenshot captured: it attaches to **one shared browser**, so a second session on the machine
+fights it for tabs and page state, and it is not reproducible a week later (same reasoning as
+the capture-script rule under Approved screens). And whatever it teaches you goes back into the
+spec as an assertion. A cause found in DevTools with no test holding it is a bug you have
+agreed to find again.
 
 ### Fixture / second-profile pattern (Playwright)
 
@@ -530,6 +650,56 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 > gotchas live in the repo's `.claude/regression-runbooks/profile.md`.
 
 ---
+
+#### A CSS `text-transform` defect is invisible to every text assertion, in every tier
+
+**2026-08-08, DrillLogify Web.** An assay table rendered its element columns through an uppercasing micro-label, so silver `Ag` displayed as `AG` and arsenic `As` as the English word `AS` — chemical symbols whose **case is their meaning**. It had shipped that way from day one.
+
+- **No text assertion can see it.** CSS casing does not change `textContent`, so `getByRole`, `getByText` and every unit assertion pass identically whether the page reads `Ag ppm` or `AG PPM`. Only `getComputedStyle(el).textTransform` distinguishes them, and only a human reading the screen suspects there is anything to check.
+- **Assert the computed style wherever a rendered string's CASE carries meaning:** chemical symbols, unit prefixes (`mV` vs `MV`, `µ` vs `M`), `pH`, gene names, currency and country codes, any identifier the user will retype.
+- Same family as the `µS/cm → ΜS/CM` trap: the label was correct and the *presentation* corrupted it.
+
+#### An `sx`/inline style loses to a theme rule written as a descendant selector
+
+**2026-08-08, DrillLogify Web.** The fix for the above — `textTransform: 'none'` on the header cell — did nothing at all, and the page looked completely unchanged after a correct-looking change. The theme uppercases every table head via `MuiTableHead → '& .MuiTableCell-head'`, specificity **0,2,0** against the `sx` prop's generated single class at **0,1,0**.
+
+- **Put the override on a CHILD element**, where a directly-set value beats an inherited one regardless of specificity.
+- **The tell is a style that "does not apply" on a component library that ships descendant-selector theming.** Before assuming the prop is wrong, read the theme for a `'& .Mui…'` rule targeting the same property.
+
+#### An anti-vacuity test must prove the PARSER resolves, not merely that files were walked
+
+**2026-08-08, DrillLogify Web.** A new static gate shipped **green with four of its checks seeing nothing**: `\b` inside a JS template literal is the **backspace character**, not a word boundary, so ``new RegExp(`<${component}\b`)`` matched zero elements. The anti-vacuity test asserted only `files.length > 400`, which was true and beside the point.
+
+- **Assert a known-nonzero count from the parser itself** (">100 TextFields", ">50 FormSections"), not from the file walker.
+- **A gate that finds nothing is indistinguishable from a codebase that is clean**, and it is by far the more likely of the two. Prove a new gate fails against the unfixed code before trusting it green.
+
+#### Measure the IMMEDIATE child before calling a wrapped-control pattern a defect
+
+**2026-08-08, DrillLogify Web.** A scan for "a `Tooltip` around a disabled element" (which fires no events, so the explanation dies exactly when the reader is asking why the control did nothing) returned **23 sites**. Measuring the immediate child rather than the subtree returned **11**. The other twelve wrapped the disabled control in a `<span>` first, which is the library's documented workaround and is **correct** — the span still fires events. The app shell's Sync button was among them.
+
+- **A sweep of the 23 would have broken a dozen working tooltips**, and the figure had already been quoted to the user as a backlog.
+- **Subtree searches over-report by exactly the population that already applied the fix**, which is the worst possible bias: the sites that did it right look identical to the sites that did nothing.
+
+#### A wait helper that asserts an ABSENCE never waits
+
+**2026-08-08, DrillLogify Web.** A shared `areaReady()` helper was `await expect(page.getByText('Loading…')).toHaveCount(0)`. That is true *before* the component mounts as well as after, so it returned instantly and the next step ran against a page with no table. Two cases failed on a probe finding zero column headers, and one on "Database not initialized".
+
+- **Wait on a positive signal first** (the table, the empty state, the heading), then on the absence.
+- Same shape as the rule that absence assertions need a positive control, applied to waits rather than to assertions.
+
+#### A fixture can trip the feature's own guard, and the case then asserts what the app is right to refuse
+
+**2026-08-08, DrillLogify Web.** Three cases seeded *only* above-cutoff intervals, so the composited result covered 100% of the sampled length, the app's own catch-all guard correctly reported the cutoff instead of stating a finding, and the cases failed asserting the finding.
+
+- **Where a feature has a guard, the fixture for the normal path must stay clear of it** — here by seeding a barren tail so the cutoff genuinely selects.
+- **Recognise this shape rather than "fixing" it by weakening the assertion**: the failure is the guard proving itself on its first run.
+
+#### `getByText('SOME_CONSTANT')` cannot prove a raw enum is absent
+
+**2026-08-08, DrillLogify Web.** An assertion that the storage value `VALIDATED` never reaches the reader was satisfied by the correctly-rendered `Validated`, because Playwright's `getByText` with a **string** matches case-insensitive substring. The assertion could never have failed.
+
+- **Whenever the point of an assertion is CASE, compare the rendered text exactly** — `allInnerTexts()` plus an equality check, or `getByRole(role, { name, exact: true })`.
+- The same trap makes "the raw code never appears" checks vacuous for any label that is a case-variant of its code.
 
 #### A devtools audit hint is not a defect report, and "fixing" one can destroy an accessible name
 
@@ -2073,6 +2243,134 @@ looked fine.
 
 ---
 
+---
+
+#### Shared singleton state: SET it, restore it, and never guard the restore with a non-waiting check
+
+**2026-08-08, Forge.Translation.** A workspace-wide "retry limit" singleton, written by one area's
+screen and read by another's cap guard. Three defects in one feature, each of which cost a run:
+
+- **The teardown silently did nothing.** It read `if (await input.isVisible()) { restore() }`.
+  `isVisible()` is a **non-waiting** check, so while the SPA was still rendering it returned `false`,
+  the restore was skipped, and the value leaked forward. **Never guard a teardown with a non-waiting
+  predicate** (`isVisible`, `isEnabled`, `count() === 0` all answer immediately), and **restore shared
+  state through the API rather than the UI** — a teardown is not the thing under test, and the API path
+  has no rendering race to lose.
+- **The leak detonated one run later, in a different file.** The dev database persists between runs, so
+  the abandoned value survived to poison the *next* run, where the failure appeared in a spec that never
+  mentions the setting: it spent three retries against a limit of twenty and got `200` where it wanted
+  `409`. Nothing in the failing file was wrong. **A case that depends on shared state must SET that
+  state in a `beforeEach`, not assume the shipped default** — then the assertion measures something the
+  case put there. Restore in `afterEach` as well; both halves are needed, for different reasons.
+- **A "rejected write changed nothing" assertion must read the value BEFORE the attempt.** Pinning it to
+  the shipped default encodes the order the suite happened to run in. Read-before/compare-after costs one
+  query and removes the dependency. Applies to every negative-path persistence check: rejected submits,
+  failed uploads, 409s, permission denials.
+
+Note that the usual defence against a persistent dev database — unique RUNID-suffixed rows — is exactly
+what does **not** help here. A singleton has no RUNID to scope to, so it is the one shape where
+set-and-restore is the only option.
+
+---
+
+#### A roll-up written after its children is a race that fixture size hides
+
+**2026-08-08, Forge.Translation.** A worker completed each document inside a loop and finalised the
+owning parent row **after** the loop. The spec polled the child to `Completed`, then read the parent
+once, and caught the window between the two writes.
+
+- **Poll every level of a roll-up, not just the leaf you happened to wait on.**
+- With one child the window is milliseconds and reads as flake; with a realistic batch it is seconds and
+  reads as a defect. **Open the worker and find where in the pass each write happens** rather than
+  assuming a status change and its roll-up are atomic.
+
+---
+
+#### Interrupting a run orphans the stack, and the next run adopts the corpse
+
+**2026-08-08, Forge.Translation.** Killing the test-runner process left the orchestrator it had spawned
+alive. The next run's global setup saw the port answering, took the `reuseExistingServer` path, attached
+to a stack whose parent was gone, and when that orphan died mid-run every remaining test failed with
+`ERR_CONNECTION_REFUSED`. Fifteen "failures", all one dead process, in specs with nothing wrong.
+
+- **Two tells separate this from a real defect, both cheap to check first:** the errors are *connection*
+  errors rather than assertion diffs, and they run **contiguously from some point to the end** rather
+  than scattered.
+- **After any interrupted run, check for a listener on the app and dashboard ports before re-running.**
+  `reuseExistingServer` is a convenience that becomes a trap exactly when you are iterating fastest.
+
+---
+
+---
+
+#### A shared-state assumption is a class of defect, not an instance
+
+**2026-08-08, Forge.Translation.** Having diagnosed that one case assumed a workspace singleton's
+default instead of setting it, the fix went into that case, the suite was re-run, and a further
+six-minute run was lost to the **same flaw in a sibling case in the same file**, asserting the same
+literal.
+
+- **When a root cause is "this case assumed shared state", grep the suite for the literal it assumed**
+  before re-running — here the default `3` and the rendered string `of 3 times`.
+- On a suite whose feedback loop is minutes, the five-second grep is worth more than the fix: each
+  missed instance costs a full run to rediscover, and each rediscovery presents as a *new* problem
+  rather than the same one.
+
+---
+
+#### A card scoped by a global filter, with detail lines that are not
+
+**2026-08-08, DrillLogify.** A dashboard driven by one period control per page rendered a chart that
+obeyed the window over three summary figures that did not. On screen: *"No QC checks evaluated in this
+period."* directly above *Standards: 100% · Blanks: 100% · Duplicates: 100%*. A second card did the same,
+listing overdue items aged 578-582 days under *"No completed lab turnarounds in this period."*
+
+- **The tell is a period-scoped empty state with any figure rendered outside its conditional.** For every
+  card that can say "in this period", list what else it draws and ask which window each figure used.
+- **No test could see it**, because each half was individually correct and no case asserted the two
+  together. The assertion that catches it is the **pair**: with data outside the window, assert the empty
+  sentence *and* that the detail figures are absent.
+- **Scoping the detail can hide something real**, so a filter that removes rows says how many it removed
+  ("11 more are overdue from before this period"). Otherwise narrowing a window looks like progress.
+- Put the window predicate in **one** function shared by both halves. Computing it inline in the view is
+  how the two drifted in the first place.
+
+---
+
+#### An all-clear that fires on an empty set
+
+**2026-08-08, DrillLogify.** A data-completeness card branched on "no rows have gaps" and rendered
+*"All **0** finished holes carry geology, surveys, samples and photos"* in success green. Nothing had been
+checked: zero of 130 holes were in the state the card filters for.
+
+- **The tell is `rows.length === 0` guarding a positive message** where the underlying population can also
+  be empty. That is **three** states, not two: nothing to check, all clear, some gaps. Only the middle one
+  earns a success tone.
+- The case must cover the empty-population branch explicitly and assert the all-clear string is **absent**
+  as well as asserting the right one is present. A presence-only assertion passes with the bug still there.
+
+---
+
+#### A chart label positioned from the data's own maximum lands outside the canvas
+
+**2026-08-08, DrillLogify.** A bar chart placed each value label at `y = height − (value/max)·height − 4`.
+For the tallest bar `value === max`, so `y = −4`: outside the `viewBox` and invisible. The chart could
+never render its own largest number, which is the one number anyone opened it for.
+
+- **Reserve headroom in the viewBox** rather than clamping the label, or it overlaps the bar it labels.
+- **The measurement is one line and beats looking at it:** read the label's `y` and compare it against the
+  `viewBox`. In a screenshot a missing label reads as a design choice.
+- Same family for a min/max **normalisation**: two records carrying a placeholder coordinate of
+  `(100, 100)` against 128 around E 500,000 / N 7,500,000 collapsed a scatter plot into four pixels while
+  faithfully rendering all 130 points. **Frame on a Tukey fence (1.5 IQR beyond the quartiles), not on
+  min/max, and not on a percentile** — a percentile frame throws the genuine edge of the data outside the
+  box and marks good records as suspect, which a test written against it will happily confirm. Pin the
+  true outliers to the edge, mark them, and say how many.
+- All three belong to the "seed data hides every cap" family: **a defect whose trigger is a property of
+  real data is structurally invisible at harness scale.** Drive the populated database once per area.
+
+---
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated
@@ -2375,13 +2673,53 @@ stale screenshot, and both are worth knowing.
 
 Drive the **real running app**, never a mock or a component-test render.
 
-**Use the same browser automation the rest of the review used**, which in Claude Code
-means the `claude-in-chrome` plugin. It drives the session that is already signed in
-and already on the right tenant, so there is nothing to set up, and its screenshots
-land as `.jpg`, which is fine (see the naming note above). Reaching for a second
-browser plugin purely to control the output format is not worth the extra moving part:
-it runs its own profile, so you re-authenticate, re-navigate, and shoot a session that
-is not the one you just reviewed.
+**Drive it with the repo's own e2e browser library, in a script you write and keep.**
+A repo that has Playwright or Cypress for its harness already has the library installed
+and a browser binary downloaded, so a twenty-line script that launches it, signs in and
+shoots a list of named states is the whole job. Take the state names as arguments
+(`node shots.mjs <outDir> [state ...]`) so a re-shoot after one fix costs one state
+rather than the full set.
+
+⚠️ **Run it HEADED by default, and make headless the opt-in.** A headed run is watchable,
+and someone watching catches things no assertion does: a step going somewhere unexpected,
+a control that flashes and vanishes, the page reloading between steps. Both of those were
+found here by the person watching rather than by the script. Headless suppresses exactly
+that feedback and buys only speed, which is the wrong trade in a review whose entire
+purpose is looking at the UI. Gate it on an env var (`HEADLESS=1`) so an unattended
+re-shoot can still be quiet, and add a small `slowMo` when headed so the run is followable
+rather than a blur. **This applies to running the e2e suite during a review too**, not
+only to the screenshot script.
+
+⚠️ **Prefer that over an interactive browser plugin, and the deciding reason is
+isolation, not convenience.** A plugin that attaches to *your* browser attaches to
+**one shared browser**: one profile, one tab group, one page. The moment a second
+review is running — another area, another repo, another person on the same machine —
+the two fight over tabs and page state, and the failure is silent and confusing,
+because the other session's navigation looks like your own page changing underneath
+you. A script launches its **own** browser process with its **own** profile every
+time, so any number run side by side. It is also the only capture method that is
+**reproducible**: the same command a week later produces the same image, which is
+exactly what a reference image is for. (2026-08-09, DrillLogify: a review was driving
+the shared Chrome when a second review started on another repo.)
+
+The interactive plugin still earns its place for **exploration** — dumping the
+accessibility tree, hovering something to see what happens, poking at a live page
+mid-diagnosis. Use it to find things out; use a script to capture what you found.
+
+⚠️ **Load the page ONCE, then navigate inside the app** — the same rule §2 states for
+specs, and it matters at least as much here, because a screenshot run is watched. One
+`goto` at the start, then click the app's own nav, links and buttons. Where a shot needs
+a record, click through to it from the list rather than reconstructing a URL. Wait on a
+**control that only exists in the destination state**, never on a timer.
+
+Two more notes when the app is offline-first or otherwise stateful. A fresh browser
+profile starts with an **empty local database**, so either launch a persistent profile
+directory that survives between runs, or have the script sign in and sync before it
+shoots. And **wait on a real signal after boot, racing the two outcomes**: an auth gate
+that redirects only once the database has booted has rendered neither the login control
+nor the signed-in shell when the script first looks, so a single `count()` sees nothing,
+skips the login, and every later step then fails on a control that was never going to
+be there.
 
 Then two things to get right:
 
