@@ -2454,6 +2454,174 @@ never render its own largest number, which is the one number anyone opened it fo
 
 ---
 
+### A row's own control can be clipped out of existence, and only geometry finds it
+
+A list row that puts text beside a control (a name and its delete button, a filename and its menu) is
+usually a flex row. A flex item defaults to `min-width: auto`, so it **refuses to shrink below its
+content**: a long value does not wrap and does not ellipsise, it pushes its siblings sideways. The card
+around the list is normally `overflow-hidden`, so the control on the far end is **clipped away with no
+scrollbar to reach it**. The action is not awkward to reach, it is gone.
+
+Measured on a project-tag list at a 500px viewport (2026-08-17): the row overflowed its container by
+**271px** and the delete button's right edge sat at **x=727** inside a `<ul>` 427px wide with
+`overflow-x: hidden`. Eight rows could not be deleted at that width.
+
+- It survives review because at desk-monitor width everything fits, every assertion passes, and the
+  button is **still in the accessibility tree**, so an a11y sweep clears it too.
+- **The check is arithmetic:** read `scrollWidth` against `clientWidth` on the row *and* on its
+  container, at a narrow viewport. Walk the ancestor chain to find which level is doing the clipping.
+- **Design for the longest value the *server* accepts**, not the longest one in the database today. If
+  the endpoint caps a name at 100 characters, the row has to survive 100 characters.
+- Fix: `min-w-0` + `truncate` on the text, `shrink-0` on the control. Same family as a hover-only
+  control: an action that exists but cannot be reached, invisible to every non-visual check.
+
+### A list capped with `Take(N)` and no paging makes a successful write invisible
+
+A list route bounded for safety (`OrderBy(...).Take(200)`, no `skip`/`take`) is not a paged list, it is a
+**truncated** one, and silence about the truncation reads as completeness. Two consequences, and the
+second is the one that bites:
+
+1. Rows past the cap are absent from every consumer of that endpoint, not just the admin screen.
+2. If the order is alphabetical (or anything other than newest-first), a **newly created** row can sort
+   past the cap and never appear. The `POST` returns `201` and the thing looks like it was never saved.
+
+That second shape had already broken a harness at 240 rows, presenting as "Add silently did nothing",
+which is not what it did, and the case that failed was three files away from the cause.
+
+- **Mirror the server's bound as a named client constant and gate the pair mechanically**, so the
+  screen's notice can never describe a limit the server no longer has.
+- Have the screen **state its count**, and at the cap say the rest are missing *and from where*.
+- Record in the module doc that the notice is a **warning, not a fix**: a deployment that needs more
+  than the cap needs real paging.
+- Coverage-map it honestly: reaching the cap is usually **not** e2e-reachable (creating N rows through
+  the real write path is slow and leaves the shared database at the cap for every later run), so it is
+  unit-owned. Say so, with the reason.
+
+### A landmark selector goes ambiguous when data volume conjures a second landmark
+
+Six assertions used a bare `getByRole("navigation")` to mean "the sidebar". That held for months, until
+the shared database crossed one page of rows and the list's pagination rendered its own
+`<nav aria-label="Pagination">`. A phone-width case then got `1` where it wanted `0`, and another failed
+on strict mode with *resolved to 2 elements*. It reads as a mass shell regression and is nothing of the
+kind.
+
+- **Name every landmark of a repeated role.** The sidebar's `<nav>` had no accessible name at all, so a
+  screen reader announced both identically: a real defect, not merely a selector problem. Fix the app,
+  then scope the assertions to the name.
+- **Chained uses are unaffected** (`getByRole("navigation").getByRole("link", ...)` resolves to one
+  element because the child filter disambiguates), so the breakage lands only on assertions about a
+  landmark's *presence*, the least-suspected place, and the reason the failure looks like something else.
+- Generalises to any role a second component can also expose: `status`, `alert`, `dialog` (a popover is a
+  dialog), `search`, `region`.
+- **The trigger is worth internalising: a spec that passed for months can start failing because data
+  volume crossed a threshold.** When a run fails in an area the diff never touched, check what the
+  database has grown into before suspecting the change. Two independent instances in one review: this,
+  and a queue whose "first card" stopped being the run's own.
+
+### A cleanup helper only protects the paths that call it
+
+A shared create-helper that registers what it creates for teardown protects nothing in the cases that
+**deliberately bypass it**, and those are exactly the cases whose subject *is* the create control: one
+types into the form because the form is under test, another posts to the endpoint because the endpoint
+is. Measured (2026-08-17): **16 of 22** rows in a shared dev database had been leaked by two such cases,
+one row per run each, walking a table toward the `Take(200)` cap described above.
+
+- **Export an explicit `registerCreated<Thing>(id)` next to every create helper**, and treat "this case
+  bypasses the helper" as the signal that it also bypassed cleanup.
+- The tell is countable without running anything: list the rows a suite creates and diff against what
+  its teardown drains.
+
+### Read a focus ring off the live page, and get its SEVERITY right
+
+A hand-rolled `<button>` with no `focus-visible:ring` is **not** indicator-less. The browser paints its
+own `outline: auto`, and it adapts to the theme: measured `rgb(137,144,153)` on a dark row, **5.24:1**.
+32 such buttons across 12 files were nearly reported as an accessibility failure; they were a
+**consistency** defect, which is a different conversation with the user and a different priority.
+
+- **Press Tab and re-read.** A programmatic `element.focus()` need not match `:focus-visible` after a
+  mouse interaction, so measuring that way describes a state the user never sees.
+- The genuine defect of this shape is `outline-none` **paired with a ring that paints nothing**: no
+  indicator *and* a class list that reads as though there is one. Grep for `outline-none` and check each
+  one has a working replacement.
+- Ship the correct spelling as **one exported constant** so the right form is the easy one, the way a
+  shared field-class constant already is for inputs.
+- Note computed `box-shadow` can report all-transparent layers even for a ring that *is* painting, so
+  confirm from the ring's own custom property or from an image.
+
+### A panel that renders from defaults has no loading state, and its default is a confident wrong answer
+
+`data?.x ?? 0` reads as defensive coding and is a **missing design**. Measured (2026-08-17): while its
+fetch was in flight an admin card printed *"Index up to date."*, pressed **none** of its three mode
+buttons, and left both action buttons enabled, so opening the screen on a badly-behind index reported
+the index as current, and a click raced state the page had not read. Two sibling cards on the same
+screen did the same thing with a settings input and a set of queue counters.
+
+- **The suite structurally could not see it.** Every assertion reached the control through
+  `findByRole(..., { pressed: true })`, which *waits*, so all of them sailed past the bad state. Two of
+  the card test files even carried a `loaded()` helper whose comment **documented** the render-from-
+  defaults behaviour as the mechanism it relied on: the "a test written around a bug will never catch
+  it" shape, from the other direction.
+- **Enumerate the four states from the component, then drive each one.** A delayed route stub for
+  loading, a stubbed 5xx for error, an emptied payload for empty. Reading the JSX finds none of them.
+- **The tell in review is a `?.`/`??` chain feeding text a reader will take as fact**, or feeding an
+  input, where an empty box is indistinguishable from a saved value of nothing.
+- Pair it with the standing rule that an empty state a *failure* can also produce is a lie: this is the
+  same rule applied to the *pending* branch, which is the half people skip because it is transient.
+
+### A help affordance's name matches by substring, so it can swallow the control beside it
+
+Extends the "name a help tip after the question it answers" rule below. It is not only the *field's own*
+caption that collides: **any sibling control's label appearing anywhere inside the tip's name** does.
+A tip labelled *"when a purge can be started or stopped"* made `getByRole("button", { name: "Stop" })`
+resolve to two elements, and every case using that button failed on strict mode rather than on its
+assertion, which reads as a bug in the case rather than in the newly added tip.
+
+- **Before adding a tip, list the accessible names of every control in the same container and check none
+  is a substring of the new label**, case-insensitively, since name matching usually is. Renaming to
+  "…or halted" was the whole fix.
+- The reverse check is worth doing when a tip already exists: a *new* button whose label happens to sit
+  inside an existing tip's name breaks the same way, and the diff that causes it touches neither.
+
+### A selected state built from several visual cues hides the failure of any one of them
+
+A pressed option was marked by a border, a soft background **and** a text colour. Two resolved; the
+border token resolved to a near-invisible surface grey, so the *selected* border measured **fainter than
+the unselected** one: 1.20 against 1.33 in dark, 1.11 against 1.28 in light. The control never looked
+broken, which is precisely why it survived where a single-cue instance of the identical token bug had
+already been found and fixed elsewhere in the same codebase.
+
+- **Measure each cue separately against the surface behind it**, rather than judging the control whole.
+- **When one instance of a mis-resolving token turns up, grep every other use of that token in a
+  *state* position** (selected, active, current, pressed). Three instances were live here across two
+  shared components and one screen.
+
+### An area's runbook folder having one file is not evidence the area has one surface
+
+A folder held only the index-maintenance runbook, whose Scope section deferred "using the results" to
+another module's runbook. That file covered one narrow journey and nothing else, so five behaviours were
+owned by **no case anywhere**, and one guard had no test at *any* level. This is the "a deferral that
+names a destination and the reader stops" trap one level up: the pointer named a **file**, which cannot
+be checked without opening it, rather than a **case ID**, which can be checked in seconds.
+
+- **Enumerate an area's surfaces from the module's own endpoints and components, never from the count of
+  files in its runbook folder.**
+- Treat every cross-file deferral as unresolved until it names an ID, in both directions: the deferring
+  file and the receiving one.
+
+### A case that exists to prove a guard is designed so it CAN be mutation-checked, then is
+
+Two new cases pinned wildcard escaping in a `LIKE` predicate, and both passed first run, which is when a
+guard-protecting test is least trustworthy. Reducing the escape helper to the identity function made both
+fail; restoring it made both pass.
+
+- The design decision that made the check meaningful: rather than searching a bare `%` (which returns
+  nothing whether or not the guard exists, so it is green and meaningless), each case searched a **real
+  seeded identifier with one character replaced by the wildcard**, so the unguarded path matches the row
+  and the guarded path cannot.
+- **Construct the input so the unguarded code path produces a different, specific result, then delete the
+  guard once and watch it fail.** Do it in the same sitting: the mutation is one line and the stack is
+  already warm.
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated
@@ -2788,6 +2956,42 @@ the shared Chrome when a second review started on another repo.)
 The interactive plugin still earns its place for **exploration** — dumping the
 accessibility tree, hovering something to see what happens, poking at a live page
 mid-diagnosis. Use it to find things out; use a script to capture what you found.
+
+### Three ways a capture script quietly produces the wrong picture
+
+All three were live in one area's first capture runs (2026-08-17) and all three exited **0**.
+
+**1. Photographing whatever the database happens to hold.** The first list image was 22 leaked harness
+rows, eight of them 100 characters of "x". That is not what the screen looks like in use, so the image
+is useless as the thing a tester compares against. **Seed plausible, realistic rows through the real
+UI**, shoot, then remove them: the module owns its own data, exactly as an area that has nothing to
+photograph until data exists already seeds itself.
+
+**2. Not restoring the viewport after a narrow shot.** `shoot(state, {width})` takes the width as a
+*label*, not as an instruction. A phone-sized shot taken after `setViewportSize(PHONE)` with no restore
+filed a 390px image under `...-1440-light.png`. **That is worse than a missing image**: the filename
+asserts a baseline the picture cannot serve, and the next reviewer compares against it. Restore the
+desktop viewport immediately after any narrow shot, and prefer ordering narrow states last so a missed
+restore cannot contaminate anything.
+
+**3. Tearing down through the UI.** Deleting seeded rows by clicking each one leaked two of four: the
+list re-fetches after every delete, so a defensive `count()` guard on the next row reads 0 mid-render
+and returns early on a row that is still there. **Seed through the real UI, since that is the state
+being photographed, but tear down through the API**, and have teardown *report what it removed* so a
+silent skip cannot pass for success. Generalises past captures: any loop that mutates a list and
+re-queries it between iterations is racing its own refetch.
+
+### Refusal states are the highest-value images in the set
+
+A refusal screen ("access required", "not found", "unavailable") that renders an icon, a heading and one
+sentence **looks finished**. When the shared panel component accepted an `action` and the
+Administrator-gate wrapper never passed one, five admin screens were dead ends: no way back, no way to
+ask for access. Nothing catches it, because the heading and copy are correct and present, so every
+assertion passes; the accessibility tree is correct; and each screen reads as complete in code review.
+The image is the only place the absence is visible.
+
+Shoot every refusal state an area can produce, and when a fix lands in the **shared** component, the
+re-shoot list crosses areas: fixing that wrapper invalidated another area's approved gate screen.
 
 ⚠️ **Load the page ONCE, then navigate inside the app** — the same rule §2 states for
 specs, and it matters at least as much here, because a screenshot run is watched. One
