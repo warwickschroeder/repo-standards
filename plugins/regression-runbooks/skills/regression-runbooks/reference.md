@@ -278,6 +278,21 @@ Quick checklist:
       reading the form source — not assumed.
 - [ ] Mutually-exclusive form branches split across cases if necessary.
 
+**An area that persists nothing is not exempt, its two ends are different.** The rule reads as though it
+needs a stored row, so an area with no row looks excused, and that is how a whole class of
+per-deployment values goes untested: branding, support addresses, environment naming, build identity,
+feature switches served at boot. For those, the input end is **the configuration the server serves** and
+the read-back end is **each surface that renders it**:
+
+- Stub the served configuration with distinctive values, then walk every surface that consumes a field
+  and assert the value arrived (a logo's accessible name, a page title, a banner, a version tag, a
+  `mailto:` link's address *and* its generated subject line).
+- Then remove the stub, reload, and assert each surface returns to what the deployment actually serves,
+  read from the live endpoint rather than hard-coded, so the case also passes on another customer's stack.
+- Name the fields that have **no** observable surface (an identity client id, a scope) and say what owns
+  them instead: usually an integration test for the endpoint plus a manual second-environment step,
+  because only a real sign-in proves they are wired.
+
 ---
 
 ## §5 Verification lanes (tri-modal) + type mappings
@@ -2694,6 +2709,71 @@ in as the abandoned process tree finishes dying.
   timings and everything after fails at an identical duration.
 - **Tear down leaked containers before re-running**, and check the readiness probe is not satisfied
   by a corpse (an SPA still serving while its API is gone will pass a naive check).
+
+### Editing a source file while a run is in flight fails the run, and the failure looks like an app bug
+
+A harness that drives a dev server with hot module replacement pushes every save straight into the
+browser, mid-test. The resulting failure is in whatever test happened to be running, which is usually an
+area the change never touched.
+
+- **The signature:** a timeout whose log shows an action hanging *after* the element resolved ("element is
+  visible, enabled and stable… done scrolling"), and a failure screenshot of a screen that has lost state
+  it was just given (a picked file gone, a filled field empty). The component tree was re-rendered under
+  the action. It is worse when the file saved is imported by the app shell, because then it reaches every
+  screen.
+- **A long-lived stack adds a second flavour.** A case that races a periodic background worker (an index
+  sweep, a purge tick) is deterministic only on a stack that has not been sitting up long enough for
+  several sweeps to fire.
+- **Triage rule:** before investigating a failure in an area the change did not touch, ask whether
+  anything was saved during the run, then re-run that case alone. Measured once: two such failures in a
+  197/199 run, both passing in under three seconds in isolation.
+- **Corollary:** do the documentation and comment edits before or after a run, never during it.
+
+### An accessible-name lookup is a substring match, so a value set with one value inside another matches twice
+
+Locator libraries match an accessible name by substring unless told otherwise, and a status vocabulary
+routinely holds one value inside another: `Healthy`/`Unhealthy`, `Read`/`Unread`, `Complete`/`Completed`,
+`Active`/`Inactive`. Asserting the four states of a services panel, `getByRole("img", { name: "Healthy" })`
+also resolved the `Unhealthy` row and failed on a strict-mode violation naming both elements.
+
+- **`exact: true` on every name lookup over such a set.** Same trap as naming a help tip after the field
+  beside it, arriving from the other direction: here the *values* collide, not the labels.
+- **A count assertion over the set is the dangerous form**, because it stays green for exactly as long as
+  the set happens to hold only the shorter value. It then breaks the first time real data includes the
+  longer one, somewhere that looks unrelated to the change that caused it.
+
+### A hover hint stays open while the pointer crosses its own panel
+
+Moving the pointer away is not a way to close a hint. The panel for a row in a left-hand sidebar opens
+upward or sideways, which is exactly the path a move toward a corner travels, and the library reads that
+as hovering the content rather than leaving the trigger. Two hints can also be open at once, since a
+trigger that keeps focus after a click keeps its own hint open.
+
+- **Assert a hint by filtering on its own text**, not on the bare `tooltip` role, so a hint left open
+  elsewhere cannot make the locator ambiguous.
+- **Close it with Escape**, which is deterministic, rather than with a pointer move whose effect depends
+  on where the panel was placed.
+
+### A glob route pattern spans partial path segments, so it stubs endpoints you did not name
+
+`**` matches across `/`, so `**/api/access/users` also matches `/api/access/dev-users`. Stubbing what you
+think is one list endpoint can silently replace a sibling whose suffix matches, and when that sibling is
+the identity or persona roster, sign-in breaks for every case after it, far from the stub that caused it.
+
+- **Use a URL predicate** (`(url) => url.pathname === "/api/access/users"`) whenever a sibling path ends
+  with the same segment, and keep it in a `const` so `unroute` passes the same reference.
+
+### Boot-time configuration must be stubbed before the first navigation, or the case passes for the wrong reason
+
+An app that fetches its own configuration (branding, auth mode, environment name, build version) does so
+before importing the rest of itself. A route registered after sign-in therefore never fires: the case runs
+against the real values, asserts them successfully, and proves nothing about the branch it was written for.
+
+- **Any case about boot config takes a fresh page and registers its route first**, which also means it
+  cannot use a signed-in fixture.
+- **Choose stub values the server would never send.** If the deployment serves "Acme DEV" and the bundle's
+  built-in fallback is "Acme", a fallback case asserting "Acme" is provable; one asserting a value both
+  could produce is not.
 
 ## §9 Test-case ID scheme
 

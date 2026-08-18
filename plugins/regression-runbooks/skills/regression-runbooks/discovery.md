@@ -164,6 +164,18 @@ do not write.
 | **State agent** | Lifecycle / workflow engine | Every `state` transition — entity lifecycle (draft→active→archived), confirmation dialogs, optimistic vs. confirmed UI |
 | **List agent** | List/table/grid components | Every `list` feature — filter inputs + options, sort columns, search/debounce, pagination (page size, cursor, infinite), selection/bulk actions |
 | **Column agent** | Repository / service / API layer | Every `column` written to persistence — map field→column name, note omitted or server-computed columns, FK columns that need a parent row |
+| **Frame agent** (once per repo, not per area) | App shell, boot sequence, layout chrome, host-level endpoints | Everything belonging to no feature: what the app fetches **before it draws anything** (branding, auth mode, environment name, build version) and what it does when that fails; the environment banner; the build identity; operator-only diagnostics panels; global security headers and health probes; and **what the app renders when a screen throws** |
+
+**Launch the frame agent once, and give what it finds its own area.** A per-area sweep is structurally
+blind to the chrome, because the chrome belongs to no area: a repo can have a runbook for every route,
+every module and every endpoint that belongs to a module, and still have nothing covering the frame those
+routes are drawn inside. Measured in one repo on 2026-08-18: 15 runbooks and 151 cases, and six
+uncovered frame surfaces, two of which were *mentioned* in existing runbooks in a way that reads like
+coverage (one as a clause inside a manual capability matrix, the other as a note about a selector
+collision). Own that area explicitly, with its own code and, where the harness is per-module, its own
+project. The failure cases are the valuable ones: asking "what does this do when it breaks" of the shell
+is what found a render crash that unmounted the whole document to a blank page, a behaviour nobody had
+ever specified because it belonged to nobody.
 
 ### How agents derive from the source-of-truth
 

@@ -268,6 +268,21 @@ regressions — and the skill compounds so each area is cheaper than the last.
   is thirteen copies of a maintenance burden and zero test coverage. Detect it
   with `grep -rn "Absent" docs/runbooks/` — every hit that is a **case heading**
   rather than a coverage-map row is one of these.
+- **Covering every area and never covering the frame they are drawn inside.** The
+  app shell belongs to no feature, so a per-area sweep cannot reach it: what the
+  app reads before it draws anything, the environment banner, the build identity,
+  the operator-only diagnostics panel, the security headers, and what appears when
+  a screen throws. One repo had 15 runbooks and 151 cases with none of that
+  covered. Give the frame its own area (`discovery.md`, frame agent) and write its
+  failure cases first, because that is where the missing behaviour is: asking what
+  the shell does when a screen crashes found that it unmounted the page to a blank
+  document, a behaviour nobody had specified because it belonged to nobody.
+- **Treating a mention as coverage.** A surface named in a note, in another case's
+  steps, or in a manual matrix's prose has **no owner**, and it reads as though it
+  has one, so the next reader stops looking. Two of the six uncovered surfaces
+  above were "mentioned": one as a clause in a capability matrix, one as a warning
+  about a selector collision. Grep for the surface, then check the hit is a
+  `### TC-` heading and not a sentence.
 - **Writing runbooks only a developer can read** — if a case's only description
   of intent is its `getByRole` steps, the manual profiles (purposes #1 and #3)
   can't actually be run by the tester they were written for.
