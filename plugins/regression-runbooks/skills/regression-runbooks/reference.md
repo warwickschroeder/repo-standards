@@ -2622,6 +2622,79 @@ fail; restoring it made both pass.
   guard once and watch it fail.** Do it in the same sitting: the mutation is one line and the stack is
   already warm.
 
+### The card got its loading state; the list inside it did not
+
+Giving a panel its four states does not cover a **second fetch behind the same panel**, and that
+sub-list is the one everybody forgets — including a pass that had just fixed the parent for exactly
+this reason. A job card fixed the previous day to stop rendering from defaults still printed
+*"No runs yet."* for its run history while that separate request was in flight **and** when it
+returned 500, so a job that had run nightly for a year reported itself as never having run, with no
+alert anywhere. Its case passed throughout, because the case drove the *card's* endpoint, not the
+*list's*. The same shape one level out: a single "facets" call filling three filter dropdowns had no
+failure state, so with it down all three rendered **enabled and empty** while the rest of the page
+loaded normally and told the reader the workspace had no projects.
+
+- **Enumerate the requests a screen issues, not the panels it draws**, and give each one its own
+  "not yet" and "it went wrong". A coverage row for `state:<screen>.loading` is not evidence that a
+  nested list has one.
+- The tell in review is the same `?.`/`??` chain as the parent defect, one scope deeper:
+  `sub.data?.items ?? []` beside a `total ?? 0` that an empty-state branch keys on.
+
+### An error branch that names the wrong cause is worse than one that names none
+
+`if (isError || !record)` is a tempting shape, and it collapses "the server said 404" with
+"everything else". A detail page built that way answered a **500** with *"Document not found — this
+document may have been removed"*: actionable and wrong, so the reader re-uploads or opens a ticket
+about a deletion that never happened. Branch on the status actually returned; reserve the
+does-not-exist sentence for the status that asserts it.
+
+- This is the network-blaming rule (§8, "don't blame the reader's connection") aimed at a
+  **specific** wrong cause rather than a vague one, and it is the more damaging of the two.
+- Drive it by forcing a 500 from the record endpoint, not by reading the branch.
+
+### Prose that restates a fetched list is a second source of truth nothing checks
+
+Where a screen fetches a set and *also* describes it in a sentence, the sentence drifts and no gate
+notices. Measured: a drop zone hand-listed its accepted file types while the provider accepted three
+more, hiding them behind "& more" — so somebody holding one of those three would reasonably conclude
+the product could not take it. The machine-readable half (the picker's `accept` attribute) was
+correct the whole time, which is why nothing looked wrong. The same screen claimed a fixed number of
+supported languages regardless of how many loaded, and named the vendor behind a config-switched
+integration seam in end-user copy.
+
+- **If the app already holds the data, render it** rather than summarising it.
+- If a threshold lives server-side, publish it on an existing response instead of re-typing it in
+  the client, so the explanation cannot describe a limit the server stopped using.
+- Assert **both directions**: every value the response carries appears, and no value appears that
+  the response does not carry.
+
+### Naming a help tip after the field it explains is the natural mistake, and it breaks selectors
+
+Accessible-name matching is **substring** and case-insensitive, so a tip named
+`Help: how the source language is used` sitting beside a control named `Source language` makes
+`getByLabelText(/source language/i)` match two elements. Notable because this was already written
+down in the repo's own gotcha list and got re-introduced **within a day of it being read**: naming a
+tip after the thing it explains is simply the obvious move.
+
+- Write the name as **the question the panel answers**, not the caption of its neighbour:
+  "how the original language is decided", "why nothing can be stored yet", "what the countdown in
+  this column means".
+- After adding tips, grep the file for every sibling control's accessible name and confirm none is a
+  substring of a tip's name. Watch for morphology too: "…can be started or **stop**ped" collides
+  with `button "Stop"`, and "…the **purge** countdown" with `button "Purge"`.
+
+### Killing a harness run mid-flight can poison the next one
+
+Stopping the runner can leave the orchestrator's containers running with nothing driving them. The
+next run's readiness probe then reports the stack as already up, reuses it, and collapses a few tests
+in as the abandoned process tree finishes dying.
+
+- Presents as **many uniform, same-duration failures starting partway through** — which reads like a
+  mass regression and is nothing of the kind. The tell is that the first few tests pass with varied
+  timings and everything after fails at an identical duration.
+- **Tear down leaked containers before re-running**, and check the readiness probe is not satisfied
+  by a corpse (an SPA still serving while its API is gone will pass a naive check).
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated
