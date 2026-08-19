@@ -256,6 +256,22 @@ regressions — and the skill compounds so each area is cheaper than the last.
   (`covered by X.md TC-FOO-F1`), which can be checked in seconds; a bare file
   reference cannot be checked at all, and one such pointer hid a real defect for
   months.
+- **Encoding a defect as a "known quirk" and then asserting it.** A runbook sentence
+  saying the app does something odd is an unraised finding, and the moment a case
+  asserts that oddity the suite starts *defending* it: fixing the app turns the run
+  red. One area's save landed on a different entity's list; the runbook called it a
+  known quirk in three places and four cases asserted the wrong URL. Grep the specs
+  for `quirk`, `known issue`, `oddly` and `for some reason` — each hit is either a
+  defect nobody filed or an explanation nobody wrote.
+- **A "stated absence" claiming the harness cannot REACH a state.** The
+  belongs-with-another-file mistake at least names a file; this one names nothing
+  checkable at all, and it reads as though somebody established it. One such note
+  said an all-clear empty state needed a deferred feature, while two cases in the
+  same file walked through that exact state on their way somewhere else. Every
+  `absent:` row names a case ID or a **mechanism** ("every control is
+  `type="number"`, so the required check fires first"), never a bare assertion of
+  impossibility, and absences get re-derived on each pass because they are the rows
+  that rot fastest.
 - **Believing a note that says a case "doubles as" another branch.** A branch is
   owned by an input, not by a shared outcome: two branches rendering the same
   screen still need two cases, because what is under test is which branch ran.

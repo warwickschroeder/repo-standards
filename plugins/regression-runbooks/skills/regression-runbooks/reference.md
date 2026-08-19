@@ -695,6 +695,44 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 - **Name a help affordance after the question it answers, not the control it sits beside:** `Help: how the end of the range is counted`. It reads better aloud and it stops colliding.
 - Same family as any repeated per-row control: if a name can be a substring of a neighbour's, use `exact` or make the names disjoint from the start.
 
+#### Making a dead control work turns every test that used it into a test that changes the world
+
+**2026-08-19, DrillLogify.** A form's per-tenant field configuration let someone mark an optional field required, and the form ignored it: no marker, no save block. One case exercised that toggle and had been green for months. The moment the app was fixed to honour it, **seven later cases failed**, all on a save that was now correctly refused, because the configuration is **tenant-wide**, persists server-side, and the harness truncates data tables but not settings. The leak had existed the whole time and was invisible for exactly as long as the control did nothing.
+
+- **A case that writes SHARED, PERSISTED configuration restores it before it finishes**, and the app's own reset affordance is the right way to do it: it covers whatever else the case changed. Assert the restoration, or the cleanup can silently stop working.
+- **The tell is a setting whose scope is wider than the record under test:** tenant-wide field config, a feature flag, a display preference, a per-device filter that syncs. Data isolation between tests almost never covers these, because they usually live outside the tables a truncate helper knows about.
+- **When you fix a control that previously did nothing, grep for every test that touches it** before running the suite. Its old assertions were written against a no-op, so they are the ones most likely to have been silently relying on that.
+
+#### A shared component's gotcha, fixed privately in one spec, is a gotcha the next area pays for again
+
+**2026-08-19, DrillLogify.** A shared field-configuration dialog renders each field's name as an editable **input**, so `filter({ hasText: 'Lift Rate' })` matches no row at all: an `<input value="…">` has no text content, and any action on the empty locator waits out the whole test budget with a screenshot that looks perfectly healthy. One spec had already hit this, diagnosed it, and written the fix as a **private function in its own file, with an excellent comment**. A fortnight later another area hit the identical wall and lost the same 150 seconds.
+
+- **Before writing a case against a component that other areas also use, grep the sibling specs for it.** The fix and its explanation are often already there.
+- **Two consumers means it belongs in the shared helpers**, and moving it is part of the fix, not a follow-up. A private helper with a good comment is a lesson only its own file can learn from.
+
+#### A "known quirk" in a runbook is how a defect becomes documented behaviour
+
+**2026-08-19, DrillLogify.** Saving a planned drill hole navigated to the *actual* drill holes list, a different page from the one the user came from. The runbook recorded it in three places as "a known quirk; assert that URL, not the planned list", and **four cases asserted it**. So the suite was actively defending the defect: fixing the app would have turned the run red, and a reader of the runbook had no way to tell a deliberate design from a bug someone had given up on.
+
+- **A quirk note is a finding that was never filed.** Whenever a runbook says a behaviour is odd, surprising, a quirk or a gotcha *about the app itself* (as opposed to about the test harness), that sentence is an unraised defect. Put it to the user as a decision rather than encoding it in an assertion.
+- **The tell is an assertion whose comment apologises for it.** Grep the specs for `quirk`, `oddly`, `for some reason`, `known issue` and `not ideal`; each hit is either a defect nobody filed or a missing explanation.
+
+#### A stated absence that names no case ID cannot be checked, and one hid a whole state
+
+**2026-08-19, DrillLogify.** A case carried "**Stated absence:** the all-clear empty state needs every plan linked, which the harness cannot reach without the linking write-back that is deferred. Manual profiles only." It was simply wrong: two existing cases in the same file linked their only plan and walked straight through that state on the way somewhere else. Nobody caught it because the sentence *sounded* like it had been checked, and there was nothing in it a reader could verify in less than an hour.
+
+- **This is the unreachability variant of the "belongs with `<other>.md`" mistake**, and it is worse, because there is no file to open at all: the claim is about the app's own reachability and can only be refuted by re-deriving it.
+- **Every `absent:` row names either a case ID or a mechanism.** "`absent:unreachable` because every control is `type="number"`, so a non-numeric entry leaves the field empty and the required check fires first" can be checked in seconds. "The harness cannot reach this" cannot be checked at all.
+- **Re-derive the absences, not just the coverage, on every pass.** An absence is the one kind of row that gets *more* wrong over time, because the app keeps growing paths to the thing it says is unreachable.
+
+#### A runbook STEP with no spec assertion is invisible to the parity gate
+
+**2026-08-19, DrillLogify.** The 1:1 gate matches `### TC-…` headings against `test('TC-…')` titles, which is the right granularity for the rule it enforces and blind to everything inside a case. A case with six steps whose spec asserts four is green. One case's step 4 (filter to a status with no rows, and read the after-filter empty) had **never** been asserted, and the state it described turned out to be one of two the area had no coverage for at all.
+
+- **The Coverage map is what closes this**, because its rows are *branches*, not cases, and a branch pointing at "TC-X step 4" is a claim someone can open the spec and check.
+- **When a case grows past about four steps, ask whether the extra steps are really a second case.** The one above was: it belonged with the other filter branches, not appended to an empty-state case.
+- **Cheap audit:** for each case, count the runbook's step rows and the spec's assertions. A case with six steps and two `expect`s is worth reading.
+
 #### A failure with no screenshot did not fail an assertion — re-run that one case first
 
 **2026-08-09, Forge.Translation.** A run reported `browserContext.close: Target page, context or browser has been closed` for one case. Its artifact folder held an `error-context.md` containing only that line and **no `test-failed-1.png`**, because there was no page state left to shoot. That shape is a teardown race, not a defect, and the case passed immediately on a single-case re-run.
@@ -2775,6 +2813,56 @@ against the real values, asserts them successfully, and proves nothing about the
   built-in fallback is "Acme", a fallback case asserting "Acme" is provable; one asserting a value both
   could produce is not.
 
+### A helper many cases share is the highest-leverage thing to re-derive before a run, because one stale line reads as N unrelated failures
+
+A spec's own navigation helpers are written once and then trusted forever, and they age against the app like anything else. Measured: a geology suite's `openLogDetail` waited on a detail heading of `0m - 15m` while the page had read `Geology log: 0 – 15 m` since a commit that reshaped six detail pages to one grammar. That single line gated **six** cases, and each failure named a different case, so the run read as six separate regressions in six separate features.
+
+- **Before a run, diff each shared helper's assertions against the source they describe**, not against the last run's result. A helper is where a stale expectation does the most damage per line.
+- **Then check the helper's siblings.** The same commit broke the equivalent helper in **four** other area specs, none of which had been run since; each would have failed at its next run for a reason having nothing to do with the code under test, and each would have cost that reviewer the same diagnosis. Grep every spec for the shape, fix them all, and say plainly which ones you did not run.
+- **A whole-area failure with a common step is this until proven otherwise**, the same way a whole-suite 0ms failure is a browser-build mismatch.
+
+### A runbook sentence that describes app behaviour is the least trustworthy thing in the file
+
+Every parity gate reads IDs and string literals. **Nothing reads prose.** So a `Note:` explaining how the app behaves is the one claim in a runbook that can be wrong for years while every check stays green, and it is read as authoritative precisely because it sounds considered.
+
+Measured in one pass: a note asserted that a coverage warning covers gaps *between* records only and that "the unlogged tail beyond the last record does not trigger it", when the gap computation had always measured head, internal **and** tail, so the alert was plural in the commonest case. A second note listed seven fields as hidden by record type that the form rendered on every type. A case written *from* the first note failed on the app's actual wording, which is the only reason either was found.
+
+- **Re-derive every `Note:` from source on each pass**, and treat one that explains a *negative* ("X does not trigger Y") as the least trustworthy of all: nobody writes a case for an absence, so nothing ever contradicts it.
+- **Where a note and the spec disagree, the spec is the half that has been executed** — but that cuts both ways, because a note nothing executes can be wrong in a direction the spec never looks.
+
+### A shared component whose gate prop defaults to permissive fails silently at every call site that forgets it
+
+A header component took `canEdit` and `canDelete` and computed `showEdit = canEdit && Boolean(onEdit)` with `canEdit = true` by default. That reads as safe. It means every page that passes `onEdit` and forgets the gate renders the button. Measured: **eight** detail pages referenced permissions nowhere at all, while the ninth had been passing the gates all along, so the pattern looked established and was followed by nobody.
+
+- **Ask what a permission prop does when omitted.** If the answer is "allows it", the component's default is the defect, and the count of offending call sites is every caller who did not think about it.
+- **Rank the halves by what they actually reach.** Edit was harmless because its route was guarded and bounced; **Delete was not a route at all** and called the repository directly, so route guards protected nothing. A gate audit that stops at "is the route protected" misses exactly the dangerous half.
+- **Cover it with the read-only persona case**, and make the positive control an ungated one, or a case that failed to switch persona passes by finding nothing anywhere.
+
+### A test double is a claim about the real thing, so adding a call to a hook breaks its doubles
+
+Three unit files failed the moment a component started calling one more member of an already-mocked hook, each with a page that rendered nothing and an error far from the change. The mocks were not wrong when written; they were incomplete stand-ins that only had to answer the calls of the day.
+
+- **After adding a hook call to a component, grep for that hook's `vi.mock` factories** and add the member. The failure mode is a blank render plus an unhandled error, which reads as a broken test rather than a stale double.
+- **The same applies to a new prop on a shared component**, when a test asserts on its rendered output.
+
+### The plural is a branch, and a message that counts things has at least two
+
+A case asserted "Missing interval detected" against an app that said "Missing interval**s** detected", because the fixture the case chose produced two ranges rather than one. The singular and plural forms of a counted message are separate branches, and picking a fixture without working out how many the app will count is how a case ends up asserting a form the app cannot produce for that input.
+
+- **Work out the count the fixture produces before writing the assertion**, and cover both forms, in the same case or in two.
+- **The same trap applies to any message assembled from a count**: a row cap that says how many it withholds, a bulk action that says how many it will affect.
+
+### A harness that forces its mode by environment must force BOTH modes, and can no longer trust its own mode check
+
+A suite that must not touch a paid or shared dependency usually pins every seam to a fake before the app starts, and verifies through the app that the pin took. That half gets written carefully, because the cost of getting it wrong is a bill. The **opposite** command, the one that runs a small tier against the real dependency on purpose, is written once and then rarely, and it is the half that quietly does not work.
+
+Measured: the offline command forced four settings onto the app and read the running config back to confirm them. The real-provider command forced **nothing at all**, relying on the app inferring "use the real one" from the presence of an endpoint in the developer's local config file. But that same file pinned the seam to the fake explicitly so everyday work stayed offline, and the app returned an explicit pin *before* it consulted anything else. So the real-provider command could only ever refuse its own run, on every machine set up the recommended way, and the refusal named the config file rather than the missing force.
+
+- **Pin the mode in both directions, from one table keyed by mode**, so a mode cannot be added without an environment. `SEAM_ENV[mode]` at the spawn site is a structurally different thing from `mode === offline ? OFFLINE_ENV : {}`, which is where the missing half hid in plain sight.
+- **Then stop trusting the mode check.** Once the harness forces the mode, asking the app "which mode are you in" returns the harness's own input, so it proves nothing about whether the real dependency is reachable or the credentials are valid. Assert something **only the real thing could have produced**: a health-probe result, a response shape the fake cannot emit, a server-assigned id. Here the services panel already carried a live probe state beside the provider name, so the fix was one extra field on an assertion that was already being made.
+- **Keep the secrets where the app already loads them from** (user secrets, keychain, a vault), never in the config file the harness overrides. That is what lets the everyday fake pin and the real-provider run coexist without a developer editing a file before and after every run, and it is why the secret being *absent* from that file is a feature rather than an omission.
+- **Watch for the second dependency the switch drags in.** Turning the real translator on also moved the run off the local storage emulator onto a real account, because the cloud service fetches over the internet and cannot see localhost. A mode switch is rarely one seam wide; find the others before the boot fails on a missing connection string.
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated
@@ -3033,6 +3121,16 @@ smallest set covering the area's distinct renderings:
   risky. Shoot the breakpoint that broke, not a comfortable one.
 - Skip states that differ only in data. Two rows versus twenty is not a new screen.
 
+### Capturing them: three traps that each cost a retake
+
+**2026-08-19, DrillLogify.** Eleven images, three consecutive wrong captures, and none of the three failures was in the app. They are the same three every capture script will hit.
+
+- **A menu is still on screen after the query for it returns zero.** MUI unmounts the `<ul role="menu">` as the exit transition *starts*, so `getByRole('menu')` goes to zero while the paper is still fading, and the shot catches a half-faded menu over the very columns it just switched on. Wait for the **Popover root** to detach, not the menu role. That element carries no role of its own, so this is the rare place a class selector is the right answer, and worth a comment saying why.
+- **A tooltip you never hovered is covering something.** A MUI `Tooltip` opens on **focus** as well as hover, and closing a `Menu` returns focus to the control that opened it, so dismissing a picker reopens that picker's own gloss. Moving the pointer away does nothing, because the pointer was never what opened it. **Blur the active element** before every shot, and treat "a tooltip appeared where no hover explains it" as this rather than as a stray hover.
+- **A `goto` to reach a state re-authenticates, and the auth endpoint is rate-limited.** Capture scripts sign in once on purpose; a later `page.goto` re-boots the app and signs in again, and an API that caps auth (20 per 60 seconds in that repo) then serves a refusal screen where the app should be. Every locator fails, and the log reads like a broken selector. Reach a URL-only state through the router instead: `history.pushState` plus a dispatched `popstate` event, which the app's router honours and which costs no request at all.
+
+**The general rule behind all three:** a capture is not an assertion, so nothing fails when it is wrong. Open every image before you commit it, and treat a retake as normal rather than as evidence of a defect.
+
 ### Naming and storage
 
 `docs/runbooks/screenshots/<area>/<YYYY-MM-DD>-<nn>-<state>-<width>-<theme>.<ext>`,
@@ -3134,6 +3232,25 @@ being photographed, but tear down through the API**, and have teardown *report w
 silent skip cannot pass for success. Generalises past captures: any loop that mutates a list and
 re-queries it between iterations is racing its own refetch.
 
+### Clearing chrome before a shot must be SCOPED, or it dismisses the subject
+
+A capture script usually needs to get a transient notice out of the way: a toast fires because the
+script seeded data a moment ago, and it is anchored exactly where the footer or the action bar sits.
+The obvious sweep is to click anything named Close.
+
+**That also closes the thing the picture exists to record.** Measured: a refused-save image came out
+showing a form with no alert on it at all, because the app's blocked-submit banner is itself a
+dismissible alert with a Close button, and the sweep hit it between the click that raised it and the
+screenshot. The file landed under the right name, at the right moment, showing the opposite of its
+subject, and only opening the image found it.
+
+- **Scope the dismissal to the notification container** (`.MuiSnackbar-root` or the equivalent), never
+  to a role-and-name query over the whole page.
+- **Then re-open the image.** This class cannot be caught any other way: the script exits 0, the file
+  exists, the size is plausible, and the state is wrong.
+- **Where a shot's whole subject is a transient**, consider not clearing anything for that one and
+  taking it first instead.
+
 ### Refusal states are the highest-value images in the set
 
 A refusal screen ("access required", "not found", "unavailable") that renders an icon, a heading and one
@@ -3176,3 +3293,99 @@ Then two things to get right:
   itself. Remove the specific keys the states you are shooting branch on, and where an
   area reads no storage marker at all, there is nothing to clear: say so in the run
   notes rather than wiping a developer's working data to satisfy a checklist item.
+
+### An enumerating case can only catch what it already lists
+
+A case whose job is "here is the complete set of X" is the case most likely to be the reason something is missing, because a reader who wants to know whether a thing is covered looks there, finds a list that does not mention it, and concludes the thing does not exist rather than that the list is stale.
+
+**Measured:** a detail page's tab-visibility matrix listed eight tabs against a page that rendered nine. The missing one had its own live count badge and its own create button, had been there for at least one release, and appeared nowhere in a 975-line runbook. Three consecutive runs of that area had reported green.
+
+**The fix is to assert the CARDINALITY as well as the members.** One extra step (`the count of role="tab" elements is exactly 9`) turns the case from a checklist into a measurement, and a tab added without a case then fails the case whose job it was to know. The same shape applies to any enumerating case: the columns a table shows, the actions in a menu, the tiles on a dashboard, the fields in a section. List the members **and** count them.
+
+⚠️ **The count has to come from the page, not from the list.** Writing `expect(tabs).toHaveCount(NAMES.length)` re-derives the expectation from the same stale list and passes forever.
+
+### A "warning" in the error channel is a refusal wearing a disguise
+
+Where a form decides whether to save by counting the entries in one errors object, **anything written into that object refuses the save**, whatever its text says. A message that calls itself a warning, or that a code comment describes as non-blocking, is still a refusal if it goes in that channel.
+
+**Measured:** a validator wrote `"Warning: Sample interval is unusually large (>10m)"` into the errors map, beside a comment reading `// Warning for unusually large intervals (not blocking)`. A legitimate 12 m composite interval could not be saved at all; the field called the blocker a warning and the form's summary said "Nothing was saved." Three sources of truth, one of them the code's own comment, all disagreeing with the behaviour, and nothing failed: no gate reads a comment, and no case had ever entered a value over 10.
+
+**What to do when discovering one.** Do not soften the copy to match the behaviour; that documents the defect. Establish which the behaviour is meant to be, then **give advice its own channel** so the two cannot be confused again: a separate value the render reads, not another key in the map that gates the save. Then write the case around the outcome (`it saves`) rather than around the message.
+
+**How to find them during discovery.** Read the validator and ask of every message: does this end up where the save gate looks? Any message whose wording hedges (`warning`, `unusual`, `consider`, `may`) while sitting in the blocking set is a candidate, and so is any branch no case has ever driven a value into.
+
+### Two facts that are each correct can contradict each other, and only a real record shows it
+
+A derived indicator states a conclusion; a stored field states a value. Put them on the same card and they can disagree, while each remains individually true and individually defensible in review.
+
+**Measured:** a header band printed `SURVEY METHOD: DGPS` beside `COLLAR: Planned`, whose own gloss said the coordinates "are still the design position and will move once it is surveyed". The indicator only ever tested whether two other columns were populated, so its wording asserted a provenance the app had never checked. The record carried a survey method and no surveyed coordinates, which is an ordinary state: the method gets recorded when the surveyor is booked.
+
+**Why no amount of green e2e finds this.** Seeded fixtures fill related fields together or leave them all empty, so the *combination* that contradicts never occurs in the harness. It occurs constantly in real data, because real data is filled in over weeks by different people.
+
+- **Look for it by reading a real record**, not a seeded one, and reading a whole card at once rather than field by field.
+- **The fix is usually the wording, not the logic.** Say what the app actually checked (`No surveyed pickup`) rather than what it inferred (`Planned`), and put the reconciliation in the gloss: "a method can be recorded before the coordinates are".
+- **Then seed the contradicting combination on purpose** so the case exists. It is a two-line fixture change and it is the only thing that keeps the wording honest.
+
+### Two totals over different populations, printed as a pair, will be read as a ratio
+
+A footer or header strip that puts two aggregates side by side invites subtraction, and nothing stops a reader doing it when the two cover different sets of rows.
+
+**Measured:** `30,712 m drilled · 17,943 m planned` on a list of 130 holes, where the planned figure summed only the 71 holes linked to a plan. It reads as a programme 71% over plan. It is not a figure about the programme at all.
+
+**Two things fix it and both are cheap.** Name the subset **on screen** beside the number (`(71 of 130 holes have a plan)`), not only in a tooltip, because the wrong reading happens at a glance and a tooltip is read after the conclusion. And gloss what each total's population is, including whether it covers the filtered set or only the visible page, because a pagination label sitting inches away invites the page reading too.
+
+**In a runbook**, own this in a case with a deliberately uneven fixture: one row that contributes to both totals and one that contributes to only one. A fixture where every row contributes to everything makes the two numbers equal and the defect invisible.
+
+### Help that is correct for assistive tech can be invisible to everyone else
+
+The same surface can gloss two ways for good reasons, and end up teaching the reader a signal that then misleads them. A plain label takes a visible affordance; an interactive one cannot take the same treatment without risking its accessible name, so it gets a describe-only tooltip, which draws nothing.
+
+**Measured on one table header row:** ten columns carried a gloss, three showed the dotted underline. The three were the non-sortable ones. A reader learns "dotted underline means there is help here" from those three and then correctly concludes the other seven have none: seven glosses, written and reviewed, reachable only by a hover nobody had a reason to try.
+
+- **Audit the affordance, not the presence of help.** Ask "which of these advertise that they have help", never "which of these have help". The second question is the one every review asks and the one that cannot find this.
+- **The fix belongs in a shared component**, because the two halves (description on the control, affordance on its text) are exactly what gets separated when written by hand at each site.
+- **Keep the pointer honest.** A help cursor on a sortable header tells the reader it is not a control, which it is. The underline carries "there is an explanation"; the cursor keeps saying "clickable".
+- ⚠️ **Teach the build gate the new call shape in the same change.** A gate that counts the raw component goes blind the moment pages adopt a wrapper around it, and it goes blind silently, reporting green while coverage falls.
+
+### A prop nothing can pass is not a facility
+
+When a shared component grows a prop, the wrappers between it and the page have to forward it. If they do not, the prop is unreachable from any page and **nothing fails**: it is simply absent from each wrapper's interface, so passing it is a type error and not passing it is silence.
+
+**Measured:** a form-field wrapper took a `labelHelp` prop, and the convention doc named it as the house answer for glossing a field label. None of the four components that every form in the app actually renders through forwarded it. For ten days the documented facility had **zero reachable call sites**, and the most jargon-heavy form in the app carried no label gloss while appearing to have declined one.
+
+- **A per-component test cannot catch it**, because each component is individually correct. What is missing is the wiring, so the test has to walk the path: render through the wrapper a page would reach for, and assert both that the gloss lands and that the control keeps its own accessible name.
+- **Before documenting a prop as the answer, use it from a page.** Reading the component that owns it proves nothing about whether anyone can reach it.
+- **In discovery, treat "the component supports X" as unverified** until a call site is found. Grep for the prop's use, not its declaration; a declaration with no callers is the signature of this defect.
+
+### Four kinds of stale fact live in a runbook, and no gate reads any of them
+
+Parity gates read case IDs and button literals. Everything else in a runbook is prose, and prose rots in ways that read as authoritative.
+
+**Measured in one file, in one pass, all four kinds:**
+
+1. **A stale version pin.** The header cited a contract version three minors behind the one the project pins. Every "derived from" claim beneath it was therefore unverifiable.
+2. **A component that does not exist.** A note named a legend component as the thing a validator must agree with. Grep found it nowhere in the codebase, and the form had no legend at all. Almost certainly written from an intention rather than from the source.
+3. **A gap entry contradicted by the spec's own helper.** The testability table said rows were not clickable and told the spec to prefer a direct URL, while that same spec's shared helper had been clicking rows the whole time.
+4. **A stale enumeration.** See the cardinality lesson above.
+
+**The check that finds all four costs minutes.** For each concrete claim in the prose, ask what would prove it, and run that: the pin against the manifest, the component name against a grep, the gap entry against the spec's own helpers, the enumeration against the page. **Where a runbook and its spec disagree, the spec is the half that has been executed**, copy from the spec and fix the prose, never the reverse.
+
+### A component library can report a state on an ARIA attribute and nowhere else
+
+A tri-state control has a DOM property for its middle state, and a component library may never touch it. Asserting the property then reads an untouched default while the state is plainly rendered, and the failure looks like the feature is broken.
+
+**Measured:** a partial "select all" checkbox rendered `aria-checked="mixed"` and `data-indeterminate="true"`, with the dash icon on screen, while the input's `indeterminate` **property** stayed `false`. `toHaveJSProperty('indeterminate', true)` failed against a control that was working perfectly, and the screenshot showed the correct state, which is the confusing part: picture right, assertion red.
+
+- **Prefer the ARIA attribute for any state a screen reader has a word for.** `aria-checked="mixed"`, `aria-expanded`, `aria-sort`, `aria-pressed`, `aria-current`. It is what the user of assistive tech actually receives, so it is the more meaningful assertion as well as the more reliable one.
+- **The error message names the fix.** A failing locator assertion prints the resolved element's attributes; read them before reaching for a different matcher. This one printed `aria-checked="mixed" data-indeterminate="true"` beside `unexpected value "false"`.
+- **Generalise the doubt:** whenever a library renders a state you did not set with a plain HTML attribute, assume it did so its own way and check the DOM before writing the assertion.
+
+### An offline-first app gives every browser context its own database, so a second persona sees nothing
+
+Where each client holds a full local database, a row created in one context does not exist in another until it has gone through the server. Add a role that **cannot sync** and the second context can never see the first one's data at all: the case fails on a locator, which reads as a selector bug and sends the diagnosis to the wrong place.
+
+**Measured:** a read-only-persona case seeded its record as the privileged persona, then switched contexts and waited out the timeout on a row that was never going to be there. The record was still local and unsynced, and the read-only role's permissions include no sync, so no amount of waiting or re-navigating would have helped.
+
+- **Seed inside the persona's own session, through the repository**, then reload so the list re-reads. Creating through the UI is not available to a persona whose whole point is that it cannot create.
+- ⚠️ **The failure screenshot may be of the WRONG page.** The runner captures the test's primary page, and a second context's page is not it, so the image shows the privileged session looking perfectly healthy. Check which page an image is of before drawing anything from it; this cost a wrong first diagnosis.
+- **This is separate from the ungated-positive-control rule** (§8), and both are needed: the positive control proves the persona logged in, and correct seeding proves there was ever anything to deny them.
