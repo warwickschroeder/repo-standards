@@ -2863,6 +2863,91 @@ Measured: the offline command forced four settings onto the app and read the run
 - **Keep the secrets where the app already loads them from** (user secrets, keychain, a vault), never in the config file the harness overrides. That is what lets the everyday fake pin and the real-provider run coexist without a developer editing a file before and after every run, and it is why the secret being *absent* from that file is a feature rather than an omission.
 - **Watch for the second dependency the switch drags in.** Turning the real translator on also moved the run off the local storage emulator onto a real account, because the cloud service fetches over the internet and cannot see localhost. A mode switch is rarely one seam wide; find the others before the boot fails on a missing connection string.
 
+### A prop that reaches nothing looks exactly like a prop that works
+
+Some props exist only to become an attribute on the rendered element: `min`, `max`, `step`, `pattern`, `maxLength`, `autocomplete`, `inputMode`, `accept`. **None of them has an observable behaviour a test would notice missing.** So when a wrapper swallows one, every check in the repo stays green: no console warning, no type error, no failing assertion, and the app behaves correctly because the application-level validator is doing the real work anyway.
+
+Measured on a form's four number inputs: the source passed `min: 0, max: 100, step: 0.01` and the DOM carried **no `min`, `max` or `step` at all**. The cause was prop precedence inside a shared wrapper: the component library maps a legacy prop into a slot object and then spreads the caller's own slot object *over* it, so any wrapper that sets that slot discards what the caller passed. A clean console, a green unit suite and a green e2e run were all consistent with it, for months.
+
+- **The check is one line, in the devtools console or in a spec:** collect the elements and read the attributes back. `[...document.querySelectorAll('input[type=number]')].map(i => [i.getAttribute('min'), i.getAttribute('max'), i.getAttribute('step')])`. Do it for any prop whose whole job is to reach the DOM.
+- **Then assert it in a case**, because the fix is invisible to everything else. One case per form, listing the fields and their expected attributes, is enough.
+- **Fix it in the wrapper, not at the call sites.** The wrapper is where the precedence bug lives, and fixing it there makes every existing caller work at once, which is also the risk: state the blast radius, because a batch of bounds going live simultaneously is a behaviour change across every form that had been passing them into the void.
+- ⚠️ **Then check that making them live is SAFE, which is a second question.** A validation attribute is enforced by the platform, ahead of any application code, with a message you cannot style and a screen reader does not read. If the form has not opted out of native validation, turning the attributes on hands validation to the browser and the app's own validator never runs. Measured: the container form had lost the opt-out its predecessor carried, so the same invalid value produced two different behaviours depending on which button was pressed, because one was the form's submit and the other a click handler. Two buttons, two behaviours, one invalid value.
+- **A workaround for a hazard that cannot currently fire is the loudest signal that two halves of a mechanism have drifted apart.** One form here had already picked a weaker attribute value over a stronger one, with a comment explaining that the container lacked the opt-out, so the stronger value "would let the browser block entries the app accepts". The reasoning was correct and the hazard was inert, because the attribute never reached the element at all. **Read such a comment as a bug report, not as documentation**, and check whether the thing it is avoiding is actually happening.
+
+### A plausible explanation of a symptom is how a defect stops being looked at
+
+The runbook for the area above had already noticed the symptom and written it down: *"the `type="number"` `inputProps` min/max do not block typed-then-pasted out-of-range values"*. Every word of that is true. It is also not the reason, and because it reads as a complete explanation nobody measured the attribute for as long as the sentence existed.
+
+- **A note that explains an app behaviour is a hypothesis, and it expires.** The runbook is the wrong place to record one without the measurement that produced it: write the number, the date and how it was obtained, or write nothing.
+- **The tell is a note that explains a limitation by appealing to the platform** (the browser, the framework, the library) without naming the code path. Platform behaviour is checkable in one command; an appeal to it is what stops the command being run.
+- Same family as *"A runbook sentence that describes app behaviour is the least trustworthy thing in the file"*, and worse, because this kind is technically correct.
+
+### A `getByText` on ordinary body copy is invisible to every parity gate
+
+The gates that keep a spec honest read it as **text**, and each looks for one shape: case ids, control names, outcome messages. A helper line, a section description, an inline validation message or any other body copy asserted with `getByText('…')` matches none of those shapes, so a copy sweep can leave a spec that **cannot pass** in a repo where every gate reports clean.
+
+Measured: a sweep that removed the comma from "e.g.," across an app changed a form's helper text. The area's spec asserted the old string and its runbook documented it. Three parity gates, a type-check, a lint run and 7,946 unit tests all passed; the failure surfaced only when the area was next run, seventeen days later.
+
+- **After any copy or casing change, grep the specs for the string you changed**, in quoted and regex form, and including the words either side of the edit, because a comma or a capital is easy to grep past.
+- **When a case asserts body copy, say so in the case's Note**, with the source file and the exact literal. That makes the runbook itself the index a sweep can grep, which is the only index that exists.
+- **A gate is only as broad as the shape it matches.** Before trusting a green gate, ask what shape it looks for and whether your change has that shape.
+
+### Building a message from a field's label can produce worse English, and it is still right
+
+The rule that a validation message must take the field's own label (so the message and the blocked-save summary cannot name one field two ways) collides with a badly-chosen label. Measured: a primary key labelled `Sample` in the canonical contract turned "Sample ID is required" into **"Sample is required"**. The new wording is worse to read and consistent with everything around it; the old wording was better to read and was one of two names for one field a few centimetres apart.
+
+- **Take the label anyway, and raise the label.** Two names for one field is the defect; one awkward name is a wording bug in a single place, and that place is the source everything else derives from.
+- **Where the label comes from a shared contract, the fix is an issue against the contract**, filed with the exact line and a suggested replacement, and the runbook records the awkward string as expected in the meantime so the next reader does not "fix" it locally.
+- The general shape: **a consistency fix can surface a quality problem that was previously hidden by inconsistency.** That is the fix working, not the fix failing.
+
+### A URL assertion resolving is not the same event as the record arriving
+
+`toHaveURL` resolves on the route change. On a form that **reuses its component** between records (a details or edit page reached from a list of siblings) the route change is the *start* of the load, and several things happen after it: the fields repopulate, and any dirty-tracking baseline is nulled and re-taken.
+
+Measured: a case asserted the URL after clicking a sibling row, then filled a field, then clicked another row expecting the unsaved-changes guard. The form nulls its baseline snapshot on the record change and re-captures it once loading clears, so the fill **landed inside the baseline**: the form read clean, the second click navigated with no guard, and the failure surfaced three steps later as "the dialog never appeared". The case had passed twice; a timing change elsewhere in the same file exposed it.
+
+- **Wait for a value that proves WHICH record is loaded**, not for the URL. Give the two records different values in the field you check (`0–1 m` and `1–2 m`), so the wait can distinguish them.
+- **The failure blames the wrong step.** It reports the missing dialog, three actions after the one that was actually too early. When a guard, a toast or a dialog "never appears", check what state the action before it was really in.
+- Generalises past dirty-tracking: any baseline, snapshot or `useEffect`-captured initial value has a window between the route change and its capture, and an automated fill is fast enough to land in it where a human's typing is not.
+
+### Every string an assertion names is a quotation, so quote it: measured four failures in one session
+
+The skill already says not to force a case's input with a payload you invented. The same rule governs every string a case **asserts**, and it is much easier to break, because a plausible string feels like knowledge rather than a guess. Four failures in a single area review, all mine, all the same mistake:
+
+| I asserted | The source said | How I got it wrong |
+| --- | --- | --- |
+| `Nothing was saved. Depth From needs attention.` | a plural sentence for two invalid fields | wrote one sentence for a helper that has two |
+| `Nothing was saved. Sample needs attention.` | the plural again, three fields, naming the first | same helper, same assumption |
+| `Very Poor` | `Very poor` | carried Title Case over from the label it replaced |
+| `getByText('Depth From', { exact: true })` | the label's text is `Depth From *` | forgot the required marker is a sibling span INSIDE the label |
+
+- **Open the source and copy the literal.** For a message helper, read the function: `useBlockedSubmit` writes a singular form and a plural one, and a case hitting the plural while asserting the singular fails on copy that is perfectly correct. For a label, read the registry. For a composed name, read the component.
+- ⚠️ **Sentence case is the trap in a rename.** When a label loses a suffix it often gains house casing at the same time: `Good (75-90%)` became `Good`, and `Very Poor (0-25%)` became `Very poor`. Assuming the prefix survives unchanged is right four times in five, which is exactly what makes the fifth expensive.
+- ⚠️ **A required marker rendered as a sibling span makes the label's text `Name *`.** Any exact text match on the name alone finds nothing. Assert the attribute on the control, and the marker by reading the label's text; both, because a star with no attribute is decoration and an attribute with no star is invisible.
+- **The cost is asymmetric and that is the argument.** Reading the source costs seconds. Each of these cost a place in a serialised suite: the runs that surfaced them were 8.9, 11.6, 25.0 and 29.7 minutes.
+
+### A parity gate that matches a string ANYWHERE in the source proves nothing about the role it appears in
+
+A gate that keeps spec locators honest usually works by asking "does this string appear in the app?". That is one substring search away from useless, because a string appears in a heading, a placeholder, a comment, a test fixture and an identifier as readily as on the control the spec is clicking.
+
+Measured: a case clicked `button "New photo"` at a page whose button reads `Add Photo`, and the gate passed it **twice over**. The form page has `title={... 'New photo'}`, and a repository file has `new PhotoRepositoryImpl()`, whose lower-cased text contains "new photo". The case then timed out at 150 seconds in a sweep, which is the exact cost the gate exists to prevent.
+
+- **Write down what shape each gate matches, next to the gate.** Ours matched case ids, button-name literals and outcome messages, which between them leave headings, inline validation messages and all other body copy uncovered. Those are precisely the strings a copy change breaks.
+- **A stale literal sitting a few lines from a CORRECT regex for the same string is the signature of a half-finished rename.** Two areas here had exactly that, and grepping the commit that moved the string (`git log -S`, then `--stat`) found a third area nobody had run.
+- ⚠️ **Tightening such a gate is its own change, not a rider on an area review.** Restricting the haystack to string literals and JSX text produced 56 orphans on one attempt and 344 on another, and the larger set was mostly REAL buttons whose labels the extractor could not see: an `aria-label`, a multi-line JSX child, a label built from a constant. **A gate whose numbers you cannot justify is worse than the blind spot**, because the next person seeds the noise into an allow-list and the signal goes with it. Document the hole, in the gate's own header, and stop.
+
+### A case that passes alone and fails in a longer run is a race, not a mystery
+
+Nothing about the code changed between the two runs; only the contention did. That single fact narrows the search enormously, and it is the first thing to establish before going anywhere near shared state, test ordering or leaked fixtures, all of which are more interesting and almost always wrong.
+
+Measured: a seeding helper ended with a page reload and returned. In an app that rebuilds a WASM database on every load, the reload resolves on the load event long before the app is usable, so a `page.evaluate` reaching a repository next threw *"Database not initialized"*. Six callers **navigated** after seeding, and a locator wait covers the boot, so they passed by accident. The seventh evaluated immediately: green at position 41 of a single-spec run, red at position 81 of a four-spec one.
+
+- **The stack lies about the layer.** It named the repository method, which reads as a data problem. The cause was the line before it.
+- **Wait on something only the booted app renders**, never a fixed timeout, and put the wait inside the shared helper so no caller has to remember it.
+- **Better: seed once.** All of a case's direct writes in ONE evaluate before a single reload, so there is no second evaluate to race.
+- ⚠️ **A helper that is safe for six of its seven callers is not a safe helper.** It is a helper with a precondition nobody wrote down, and the seventh caller is where it gets discovered, at whichever position in whichever run happens to be busy.
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated
@@ -3251,6 +3336,12 @@ subject, and only opening the image found it.
 - **Where a shot's whole subject is a transient**, consider not clearing anything for that one and
   taking it first instead.
 
+### The shot must scroll its own SUBJECT into view
+
+A pane that scrolls internally will already have been scrolled by the app before you shoot it, and not to where you want it. Refusing a save moves focus to the first field that failed, which sits **below** the alert explaining the refusal, so the image came out showing a red outline and none of the reason for it. Waiting for the alert is not enough: it was present, visible, and off-screen.
+
+Give the shot helper an optional locator to bring into view first, and pass it for every state whose subject is not the top of the page. Note that this is a *second* way to lose the same picture: the other is an unscoped chrome sweep dismissing the alert itself (below).
+
 ### Refusal states are the highest-value images in the set
 
 A refusal screen ("access required", "not found", "unavailable") that renders an icon, a heading and one
@@ -3389,3 +3480,31 @@ Where each client holds a full local database, a row created in one context does
 - **Seed inside the persona's own session, through the repository**, then reload so the list re-reads. Creating through the UI is not available to a persona whose whole point is that it cannot create.
 - ⚠️ **The failure screenshot may be of the WRONG page.** The runner captures the test's primary page, and a second context's page is not it, so the image shows the privileged session looking perfectly healthy. Check which page an image is of before drawing anything from it; this cost a wrong first diagnosis.
 - **This is separate from the ungated-positive-control rule** (§8), and both are needed: the positive control proves the persona logged in, and correct seeding proves there was ever anything to deny them.
+
+### A feature that starts matching on data content invalidates a suite isolated by names
+
+Most harnesses isolate rows by a unique **name**: a run-id-suffixed string keeps them from colliding, and teardown deletes by that name. That strategy silently stops holding the moment a feature starts keying on the **content** of the data instead. Nothing about the tests changed; what changed is that two rows the suite considered unrelated are now the same thing to the app.
+
+**Measured:** an upload feature began matching an earlier document by the SHA-256 of its bytes, ignoring the file name. Three specs in that area drove the file input directly and then submitted, so nothing registered them for cleanup, and each reused fixed content (`Buffer.from("hello")`, `Buffer.from("valid")`) as the same persona with the same options. Harmless for months. From the moment the feature shipped, those leaked rows meant unrelated upload cases would render a duplicate advisory **on the second run and not the first**: green once, red later, with the cause in a different file and no assertion diff pointing at it.
+
+- **Ask what teardown keys on whenever a feature's key stops being an id.** The review question is not "do the tests pass" but "does anything the app now compares survive between runs".
+- **A direct-input upload needs both halves, for different reasons.** Deriving each spec's bytes from its own unique name removes the collision; registering the row for teardown stops the leak. Fixing only one leaves the other failure mode live.
+- ⚠️ **Two fixes landing together can share evidence that only supports one.** Two consecutive green runs were offered as proof that the cleanup half worked. They were not: content-uniqueness alone makes a cross-run collision impossible, so the identical result would appear with the registration calls stubbed out. Ask which change a piece of evidence actually discriminates, and say so in the report when the answer is "not this one".
+
+### A name in the wrong CASE passes forever, so no run and no gate will ever tell you
+
+Playwright (and Cypress, and Testing Library) match an accessible name **case-insensitively** unless told otherwise. So a spec asking for `button "Save & Close"` finds a button labelled `Save & close`, and goes on finding it after every rename that keeps the letters. Any parity gate that lower-cases both sides before comparing is blind to it by construction.
+
+Swept across one repo's suites: **86 case-only mismatches in 30 spec files**, every one green, including **11 in a single file** for one submit button. The pattern is always the same drift, and it is the same direction every time: the app writes sentence case (`Create drill hole`), the spec writes Title Case (`Create Drill Hole`), because Title Case *reads* like a label.
+
+- **It matters even though it passes.** The spec is the written record of what the UI says. A reader trusts it, quotes it into a runbook, and the runbook then tells a human tester to look for a button that does not exist by that name. It is also the tell for a real rename that nobody noticed.
+- **Add it to the locator gate as a ratchet, not a gate at zero:** report a name that matches the app source case-insensitively but **not** case-sensitively, seed the allow-list with what is outstanding, and fail if an entry stops mismatching so the list can only shrink. Fixing all of them at once means editing areas nobody has reviewed.
+- ⚠️ **Harvest the RAW source text, not quoted literals.** A label that is JSX text (`<Button>New Suite</Button>`) is absent from a literals-only haystack, so the check reports the *correct* spec as wrong. Verify every hit against the label's real source before changing it.
+
+### A declared minimum is not a minimum until something enforces it, and only an image will tell you
+
+A layout primitive that takes `minWidth`-style props can apply them on the *interaction* and not on the *initial render*, which no test tier can see: no case asserts a pixel width, and none should. Found by measuring an approved screen: a split pane fitted its ratio to both panes' minimums **only while the divider was being dragged**, so the pane opened at 466px against its own declared 560px minimum, and a ratio persisted from a large monitor squeezed it on a laptop with nothing to correct it.
+
+- **Fix it in the primitive, on every render**, off a measured container width (a `ResizeObserver`, so a sidebar collapse re-fits it too and not just a window resize). Keep the *stored* preference as the user set it and narrow only what is rendered, so widening the window restores their choice.
+- ⚠️ **Count the furniture between the panes.** A divider sits between them and eats width the percentages never see, so the second pane gets the remainder *minus the divider*. Leaving it out left the pane 18px short at every width, and the first fix measured 534px against 560. Share one exported constant between the arithmetic and the divider's own style.
+- **Where content genuinely does not fit, let the container scroll rather than squeezing tracks.** A column header ellipsised to `S..` over a column of values is worse than a sideways scrollbar, because the header is the part carrying the meaning. Size a column to its **header**, not its values.
