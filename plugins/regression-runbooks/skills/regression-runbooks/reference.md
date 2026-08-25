@@ -2937,6 +2937,38 @@ Measured: a case clicked `button "New photo"` at a page whose button reads `Add 
 - **A stale literal sitting a few lines from a CORRECT regex for the same string is the signature of a half-finished rename.** Two areas here had exactly that, and grepping the commit that moved the string (`git log -S`, then `--stat`) found a third area nobody had run.
 - ⚠️ **Tightening such a gate is its own change, not a rider on an area review.** Restricting the haystack to string literals and JSX text produced 56 orphans on one attempt and 344 on another, and the larger set was mostly REAL buttons whose labels the extractor could not see: an `aria-label`, a multi-line JSX child, a label built from a constant. **A gate whose numbers you cannot justify is worse than the blind spot**, because the next person seeds the noise into an allow-list and the signal goes with it. Document the hole, in the gate's own header, and stop.
 
+### A type that says optional while the database says NULL: the mapper's cast hides it from everything
+
+**A model narrowing a nullable column to an optional one is a claim, and the generic row mapper is where the claim goes unchecked.** `fromSqliteRow(Columns, row) as unknown as Entity` (or any `as unknown as` in a read path) satisfies the compiler whatever the runtime values are, so a coercion that was documented and never written is invisible: the type says `?: number`, the value is `null`, and every consumer written honestly against the type is wrong.
+
+Measured: an entity typed three columns `?: number` and its own docstring said the read path coerced them. It did not. Both surfaces rendering that entity's interval tested `!== undefined`, which `null` satisfies, so **three of five cards on a real record set printed `nullm - nullm`** and the detail page printed `null - null m`.
+
+- **Nothing in the usual net reports it.** Not a schema-conformance test, which diffs table *shapes* rather than read-path values. Not the build. Not 7,988 unit tests. Not the area's own e2e suite, which passed 14/14. **The first thing that reported it was a screenshot with the word `null` in it**, which is the argument for §11 in one sentence.
+- **Fix the mapper, not just the render site.** The mapper is the one place the value crosses from the database's vocabulary into the model's. A render-site guard leaves the next consumer to rediscover it.
+- ⚠️ **`?? undefined`, never `|| undefined`.** A real `0` is data, and the falsy form deletes it. Assert the zero survives, because that is the coercion's own foot-gun.
+- **Assert it through the REPOSITORY, not raw SQL.** The row still holds NULL and always will, so a SQL read-back proves nothing about the narrowing. This is a data-layer change, so it belongs in the integration tier as well as the render-site case.
+- **The tell for the whole class:** a docstring describing a coercion, and a mapper that spreads a cast. Add a case that renders a record with every nullable column empty, and assert the page contains no `null`, `undefined` or `NaN` anywhere. It is one line and it covers a family.
+
+### When every call site breaks one rule the same way, read the wrapper between them
+
+**The tell is uniformity, not difference.** A per-page review compares a page to its neighbours, so a rule broken identically everywhere reads as the house style and nobody files it.
+
+Measured: a page's private `TabEmptyState` wrapper took a single `message` prop and passed it to the shared `EmptyState` as `title`, forwarding no `description`. All **nine** sub-entity tabs therefore shipped with no second line and with a trailing full stop the convention forbids, while every other empty state on the same screen carried one. Nine identical breaches, one wrapper, one fix.
+
+- **Do not sweep the call sites.** The wrapper is the only place the fix lands once, and it is the only place a future call site inherits it from.
+- **Same family as a prop that no wrapper forwards, and a prop that defaults to permissive.** All three are cases where each component is individually correct and the wiring between them is the defect, so a per-component test can never catch it. What catches it is one spec that walks the whole path.
+- **Cheap detector:** for any shared component with a documented multi-part contract (title AND description, label AND help, canEdit AND canDelete), grep for private wrappers around it and read their prop lists.
+
+### A gate's own honesty check is a ratchet too, and it can cover half of itself
+
+A convention gate with per-file allow-lists usually has two halves: fail on a NEW violation, and fail when a file that has been **cleaned** still sits in the list. The second half is what stops an allow-list describing work already done. It is also easy to write for some of the ratchets and forget the rest.
+
+Measured: a gate carried six ratchets and its honesty check covered three. An area review cleared both of one file's entries and the suite stayed green with the entry still listed, so the next reader would have re-derived work that was finished.
+
+- **Enumerate the ratchets and the honesty check side by side**, and count them. If the two numbers differ, the difference is silent debt.
+- **Extract the counter when you add it to the second half**, so the regression half and the honesty half cannot form two opinions of the same rule.
+- ⚠️ **Moving a regex is where `\b` dies.** Passing one through a shell heredoc collapses the escaping and yields a literal backspace byte (0x08), so the pattern matches nothing and the honesty check then reports **every** listed file as cleaned. Write such a script to a file with a tool that does not re-escape, and read the byte back (`od -c`) before believing a count. A count of zero from a gate is a claim about the parser first and the code second.
+
 ### A case that passes alone and fails in a longer run is a race, not a mystery
 
 Nothing about the code changed between the two runs; only the contention did. That single fact narrows the search enormously, and it is the first thing to establish before going anywhere near shared state, test ordering or leaked fixtures, all of which are more interesting and almost always wrong.
@@ -2947,6 +2979,47 @@ Measured: a seeding helper ended with a page reload and returned. In an app that
 - **Wait on something only the booted app renders**, never a fixed timeout, and put the wait inside the shared helper so no caller has to remember it.
 - **Better: seed once.** All of a case's direct writes in ONE evaluate before a single reload, so there is no second evaluate to race.
 - ⚠️ **A helper that is safe for six of its seven callers is not a safe helper.** It is a helper with a precondition nobody wrote down, and the seventh caller is where it gets discovered, at whichever position in whichever run happens to be busy.
+
+### A "N of N rows" figure is evidence about whoever WROTE the rows
+
+A measurement like *"NULL in 1,627 of 1,627 rows"* is the strongest kind of finding this process produces, and it carries an unstated premise: that the rows came from users. On a seeded environment they came from a generator, and then the figure says something entirely different. The same number supports opposite conclusions depending on which it is, and nothing on the page tells you.
+
+Measured: a form's dropdown rendered **empty** for its stored value on 1,626 of 1,626 rows, because the column held enum-style tokens (`STRIKE_SLIP`) while the app's code list declared letters (`SS`). The runbook and a helper's own docstring had recorded it for weeks as *"a data vocabulary mismatch to settle server-side"*, and the review then put it to the user as the stored values matching the canonical enum. Neither was true. The column had **no** canonical constraint at all, and the values came from a four-element local pool in the sibling API repo's dev seed generator, under a comment saying free-text columns get small local pools. So it was a test fixture disagreeing with the product, and the fix belonged in the generator, not in the app's vocabulary. Changing the app would have bent what a user is allowed to pick to fit a fixture.
+
+- **Trace the figure to its writer before naming the fix.** `grep` the distinctive value across the app, the API and the seed scripts. One grep separates "our users' data" from "our fixture".
+- ⚠️ **A column with no canonical enum still has a vocabulary: the app's own code list.** That is exactly where a generator drifts, because there is no constraint to fail against, and a reviewer reading the generator sees a plausible list of plausible values.
+- **The user-facing half is still worth fixing.** A stored value the list has no entry for should render humanised rather than blank: an unknown code reading as a word beats a field that says "not recorded" about something recorded.
+- **State the correction out loud when a premise you gave the user turns out wrong**, before acting on their answer. A decision taken on a false premise is worse than no decision, and the answer to "fix the fixture" is not the answer to "fix the product".
+
+### Audit help by GROUP, not by field: the odd one out reads as having none
+
+A gloss affordance is a vocabulary the reader learns from repetition. Where four labels in a row carry the dotted underline and the fifth puts its help somewhere else, the reader learns the convention from the four and correctly concludes the fifth has none. Every individual field is correct and the group is not, so a field-by-field audit passes.
+
+Measured twice, in different shapes. A table where the sortable headers glossed through a tooltip with no visible affordance while the non-sortable ones beside them drew the underline: **all ten** carried a gloss, three showed the affordance, so seven were reachable only by a hover nobody had reason to try. Then a form where the one read-only computed field put its explanation in an icon inside the input while its four neighbours used the label: the one number on the form nobody types, so the one whose meaning was least guessable.
+
+- **The fix is to move the odd one onto the group's affordance**, not to add a second affordance to it. Two help mechanisms on one control is noise.
+- **The case asserts the affordance, not just the text.** "Every label in this group carries a gloss" is the assertion that fails when the next field is added without one.
+- **Look for it wherever two correct decisions meet:** a mixed row of sortable and plain headers, a form mixing editable and computed fields, a list mixing linked and unlinked cells.
+
+### A parity gate can be satisfied by a comment in the very file it polices
+
+A gate that searches app source as **text** cannot tell a rendered string from a comment. So a docstring quoting a control's name in the wrong casing, or naming a label that no longer exists, is evidence to the gate that the code is fine.
+
+Measured: a spec's button-name casing ratchet passed on three miscased locators because the page's own JSDoc quoted all three in the wrong casing. Correcting the comments made it fail immediately and correctly, and it then reported that one of the three, a **shared** action-bar label, was miscased at 110 sites across six specs. One comment in one file had been hiding the whole app's debt for that label.
+
+- **When a comment names a control, spell it the way the control renders.** Otherwise the comment becomes the gate's evidence.
+- **After clearing a violation, check WHAT the gate is matching**, not just that it is green. A gate that goes from green to red when you fix comments was never measuring the code.
+- **The reverse is the same trap:** a gate ratchet counting occurrences of a pattern will count prose *about* that pattern, so a comment explaining why a call was removed re-adds the count the removal cleared.
+
+### A standing explanation is not an alert, and the component library defaults it to one
+
+An informational banner explaining what a field means is permanent furniture. Rendered through a component whose default role is `alert`, it becomes an **assertive live region**: it interrupts a screen reader on every render, and it claims urgency about a sentence nobody has to act on.
+
+Measured: MUI's `Alert` defaults to `role="alert"`, and a form's blue "here is what these two angles measure" banner announced itself assertively every single time the form drew.
+
+- **Keep the severity for the colour and override the role** (`role="note"`).
+- **The distinction is event versus furniture.** An `Alert` reporting an outcome, a failed save, a refused sync, correctly stays an alert.
+- **A11y lens check:** dump the accessibility tree and look for `live="assertive"` on anything the page always shows.
 
 ## §9 Test-case ID scheme
 
@@ -3342,6 +3415,17 @@ A pane that scrolls internally will already have been scrolled by the app before
 
 Give the shot helper an optional locator to bring into view first, and pass it for every state whose subject is not the top of the page. Note that this is a *second* way to lose the same picture: the other is an unscoped chrome sweep dismissing the alert itself (below).
 
+### A focus ring cannot be photographed with `focus()`, and a missing-file state cannot be reached at all
+
+Two states are worth shooting and neither arrives by driving the UI the ordinary way.
+
+**A keyboard focus ring.** `:focus-visible` is a *keyboard* pseudo-class, so `element.focus()` moves focus and draws nothing. A capture that focuses programmatically produces an image identical to the unfocused one, lands under a filename claiming to show the ring, and reads as verified. **Tab to it** (`keyboard.press('Tab')`, or focus a known neighbour and `Shift+Tab`), then shoot. This is the image that proves an a11y fix, so it is exactly the one that must not be vacuous.
+
+**A state the app cannot produce.** An offline-first app has states that arise from the environment rather than from any user action: a stored image the browser has evicted, a row whose optional column no form can leave empty. Nothing in the UI can create them, so **seed them through the repository inside the capture script**, and say in the script's header that you did and why. The same applies to the case that asserts the state: a reader who finds no UI path to it will otherwise conclude the case is unreachable and delete it.
+
+- ⚠️ **A seeded broken value has to be broken in the way production breaks.** A data URI whose payload is not valid base64 makes the `<img>` fire `onError`, which is what an evicted file does; an empty string takes a different branch and proves a different thing.
+- **Shoot the same state on every surface that renders it.** The missing-file case here had a worded screen on the record's own page and, on the list, the browser's default broken-image glyph with the caption spilling out as alt text. Two screens, one cause, and only the pair of images showed they disagreed.
+
 ### Refusal states are the highest-value images in the set
 
 A refusal screen ("access required", "not found", "unavailable") that renders an icon, a heading and one
@@ -3508,3 +3592,36 @@ A layout primitive that takes `minWidth`-style props can apply them on the *inte
 - **Fix it in the primitive, on every render**, off a measured container width (a `ResizeObserver`, so a sidebar collapse re-fits it too and not just a window resize). Keep the *stored* preference as the user set it and narrow only what is rendered, so widening the window restores their choice.
 - ⚠️ **Count the furniture between the panes.** A divider sits between them and eats width the percentages never see, so the second pane gets the remainder *minus the divider*. Leaving it out left the pane 18px short at every width, and the first fix measured 534px against 560. Share one exported constant between the arithmetic and the divider's own style.
 - **Where content genuinely does not fit, let the container scroll rather than squeezing tracks.** A column header ellipsised to `S..` over a column of values is worse than a sideways scrollbar, because the header is the part carrying the meaning. Size a column to its **header**, not its values.
+
+### Two screens can each be internally consistent and still contradict each other, and only real data settles it
+
+Reading one surface's code can never surface this class of defect, because nothing in that file is wrong. A form described a measurement one way and the record's own page described the same measurement the opposite way, and each was coherent on its own terms: matching title, helper line, slider labels and derived descriptor on one side, matching tiles and rows on the other. The contradiction lived only in the comparison, which no file contains.
+
+**Measured:** a drilling app's survey form read a **positive** angle as pointing downwards ("90° = Vertical (straight down)", a negative one labelled "Upward angle (rare)"), while the record's page read a **negative** one that way. The database settled it: **1,058 of 1,058** readings were negative, and the parent records' own two angle columns 128 of 128 each. So the form told a geologist that every real reading in the system was a rare upward hole. The suite had been **asserting the form's version for two months**, which means it was defending the defect and a fix would have turned the run red.
+
+- **Open the real data before believing either surface.** One query over the live tenant answered in seconds what neither file could. Where a value has a sign, a unit or a convention, the population is the arbiter, not the code.
+- **The fix is one shared function, not two corrected copies.** Both surfaces now call one helper whose bands are pinned by a unit test, so they cannot drift apart a third time. Two corrected copies is the same defect waiting.
+- ⚠️ **Check what the suite currently asserts before changing the app.** A case written from the wrong surface reads as coverage and is the opposite: grep the specs for the strings involved and expect to rewrite cases, not just code.
+- **The tell is a value described in words on two screens.** A status, a band, a direction, a severity, a "good/poor" label. Any time the same figure is glossed in two places, diff the two glosses as a review step.
+
+### A component-tier test can lie in two directions at once: a stale mock and an unmounted subject
+
+Both failure modes make the DOM *smaller* than the real page, and an assertion that something is **absent** cannot tell that apart from success.
+
+**A mock is a copy of an interface, and it goes stale silently.** Adding one call to a hook the page already used broke seven cases, every one rendering an **empty document**, because the hand-written mock listed nine of that hook's methods and not the tenth. The failure reads as a render crash with no message, not as a missing key. Same shape for a provider the page newly depends on: a context hook that throws by design (rather than returning a default) takes the whole tree down, and the wrapper is where it has to be fixed.
+
+**A responsive shell can unmount the very thing under test.** jsdom reports a narrow viewport, so a split-pane layout puts its secondary pane behind a drawer. Two new cases asserting that a raw code no longer reached a cell **passed against a document containing no pane at all**, and one of them had been written as a pass before the drawer was ever opened.
+
+- **Pair every absence assertion with a positive anchor in the same test.** Assert a value you know is there (a seeded depth, the pane's own heading) before asserting what should not be. This is the §8 ungated-positive-control rule applied one tier down.
+- **When a whole file's cases fail with an empty body, suspect the wrapper before the component.** Check what the page newly imports, then check the mocks and providers cover it.
+- ⚠️ **A phrase built from a label is not the phrase the user sees, in a test.** Where a helper composes wording from a display name, a mock that returns the field's raw name produces `No surveydate recorded`, not `No survey date recorded`. Assert the composed shape, or make the mock return realistic labels.
+
+### An e2e harness that starts its own dev server can corrupt the one a human is using
+
+Where the harness spawns a bundler's dev server from the same working directory, both servers default to the **same dependency-optimize cache**, and each rewrites the chunks the other has already handed a browser. The symptom is remote from the cause and looks like an application bug: every page mounting one particular provider renders the error boundary, with a null-property error inside a library component, because the page ends up holding two copies of the framework.
+
+**Measured:** starting the harness broke the developer's own server for the rest of the session. Restarting it appeared to fix it, so an earlier area review recorded "restart with `--force`" as the remedy and lost half an hour; the next harness run broke it again. Two area reviews hit this before anyone compared the two servers rather than the two runs.
+
+- **Give the harness its own cache directory,** keyed off whatever environment variable already marks the harness path, so the two can never collide. One line, in the config that already knows which server it is.
+- **The discriminator is another page, not another run.** Loading an unrelated page that mounts the same provider proved it was server-wide in seconds. A second restart proves nothing, because the fix and the breakage alternate.
+- ⚠️ **A service worker will hide the fix.** An offline-first app registers one in development too, so it serves the stale module graph back after a hard reload. Unregister it and clear the caches before concluding a rebuild did not work.
