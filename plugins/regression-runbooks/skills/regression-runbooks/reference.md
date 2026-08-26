@@ -666,6 +666,19 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 
 ---
 
+#### A harness that pins its outbound seams but inherits its login is only half-hermetic, and the inherited half fails as a timeout
+
+**2026-08-26, Forge.Translation.** The harness took real trouble over its integration seams: it forced every provider onto the stack it spawned, in **both** directions, keyed by run mode so a mode could not be added without one, specifically so a developer's local config could never turn a suite run into a live-service run. Then it took the **sign-in mode** from that same local config file. Every spec authenticates through the app's dev header scheme, so on a machine configured to sign in with real identity the suite could not run at all: the readiness gate waits for seeded test personas, the endpoint that serves them is gated on the flag that was off, and the wait expires after eight minutes naming nothing. The developer's standing workaround was to edit two lines before a run and edit them back afterwards, and forgetting the second edit silently changed how their own next manual run authenticated.
+
+**Enumerate everything the harness needs the app to BE, not just the outbound seams:** the auth mode, the seeded fixtures, the feature flags a spec assumes, the toggles that change a screen's shape. Whatever is inherited rather than pinned is one config file away from a silent, unattributable failure, and inherited auth is the worst of them because it surfaces as a readiness timeout rather than as an error. Pin each one beside the seam pins, and put the **key spellings** under the same mechanical sync check the seam values already have: a rename on the server side leaves the harness setting a key nothing reads, which is that silent timeout again.
+
+Two corollaries worth keeping:
+
+- **The cheapest proof that the harness overrides local config is the one case that reads the config back.** Rather than reasoning about precedence, set the local config the *wrong* way on purpose and run the single existing case that asserts which provider each seam resolved to. Where a suite already contains a case that observes its own environment, that case is the regression test for changes to the environment plumbing.
+- **A free-tier cloud resource can satisfy every config check and still not offer the feature.** Endpoint present, correct form, valid key, and the SKU simply does not include the API. What caught it was a health probe that happened to call a feature-specific endpoint, so the seam's *state* told the truth where its provider name could not. Prefer a connectivity probe that exercises the feature the app actually uses over one that merely authenticates, and when pointing a run at real infrastructure, check the SKU alongside the endpoint and the key.
+
+---
+
 #### A utility class that shares a token's NAME but not its value leaves a control with no focus indicator
 
 **2026-08-09, Forge.Translation.** Four fields were styled `outline-none focus:border-accent`, which reads as "swap the browser ring for an accent border". In that app's theme `--color-accent` was mapped to `--surface-hover` (the brand accent being `primary`), so the browser ring was suppressed and the replacement border came out **quieter than the resting state**. Focused and unfocused were the same colour against the same backdrop, in both themes. It survived every code review, because the class list reads correctly, and every screenshot, because a screenshot never shows a focus ring you have not triggered.
@@ -3101,6 +3114,26 @@ Measured twice in one run: a header sweep returned eleven entries because the ap
 - **Assert the expected list EXACTLY, not with `contains`.** An exact match is what reported both mistakes; a containment check would have passed over the first and hidden the second.
 - **Read the component's own markup before scoping to a library class.** "It looks like a card" is not evidence that it is one.
 
+### A feature that keys on content breaks the fixture generators that are not tests
+
+**When a feature starts matching records by their content, the spec suite gets fixed and the generators outside it do not, because nobody thinks of them as fixtures.** A screenshot-capture script, a demo seeder and a fixture loader all write real records through the real app, and none of them has fixtures, teardown, or a CI run that would have failed. They are also the ones writing into a database nobody cleans, so they are where stale content accumulates fastest.
+
+Measured: an upload feature began treating a file whose bytes were already on the platform as a repeat, and skipping it. The specs had been made content-unique months earlier, for exactly this reason. The capture script still seeded through the real upload form with plausible fixed strings, so its **first** upload became a repeat of the previous run's identical bytes: skipped, no success panel, and the pass died on a thirty-second timeout inside a helper called `seedDocument`. The tell was that the failure was in a *seed*, not in an assertion.
+
+- **Enumerate every generator that writes real records** when a match key changes: specs, capture and screenshot scripts, demo and seed scripts, fixture loaders.
+- **Stamp a per-run marker into whatever the feature keys on, and only that.** The human-facing fields usually have to stay stable (a capture script's file names are what its images show), so vary the bytes and leave the names alone.
+- **A generator that is not a test has no teardown and no gate.** That is the reason to fix it deliberately rather than waiting for it to be caught.
+
+### Tooltip and help copy restates a label the data beneath it also renders
+
+**An unscoped text assertion for help copy is a case whose result depends on the database.** Help text almost always explains a label that appears in the list below it, so the same string is present twice for reasons that have nothing to do with each other, and the case passes only while the current data happens not to contain the second one.
+
+Measured: a case opened a search-labels help tip and asserted `getByText(/Filename \/ metadata/i)` unscoped. That is the tip's own copy and the badge a filename-matched result wears. It passed for weeks; then eighteen rows accumulated by earlier capture runs made one search term return filename matches, the locator resolved to eleven elements, and strict mode failed it.
+
+- **Scope help-text assertions to the tip's own container.** A Radix Popover exposes `role="dialog"`, so `getByRole("dialog").getByText(...)` is both precise and readable.
+- **Read the failure screenshot before suspecting the app.** It showed the tooltip open and word-perfect, which pointed at the locator in seconds; the error text named only the ambiguity.
+- **Suspect this class whenever a long-passing case fails with no code change**, and the string it asserts is also a label, badge or column header.
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated
@@ -3705,3 +3738,65 @@ Where the harness spawns a bundler's dev server from the same working directory,
 - **Give the harness its own cache directory,** keyed off whatever environment variable already marks the harness path, so the two can never collide. One line, in the config that already knows which server it is.
 - **The discriminator is another page, not another run.** Loading an unrelated page that mounts the same provider proved it was server-wide in seconds. A second restart proves nothing, because the fix and the breakage alternate.
 - ⚠️ **A service worker will hide the fix.** An offline-first app registers one in development too, so it serves the stale module graph back after a hard reload. Unregister it and clear the caches before concluding a rebuild did not work.
+
+### A card's render guard must ask its own contents, never a list of field names
+
+**The guard and the card are two separate edits, and nothing keeps them in step.** A panel written as `{(a || b || c) && <Panel>…</Panel>}` over a panel holding six values reads as correct in review, because the three fields it names really are fields of that card. Adding a fourth row is a change in one place; the condition above it is a change in another.
+
+**Measured on a water-log record page.** The guard named three columns and the card held six. On the real tenant those three were empty on **110 of 110** rows while two of the other three were filled on **110 of 110**, so the card never drew and two values recorded on every single record were shown on none of them. Nothing failed: not a test, not a type, not a build. The suite had passed 12/12 twice.
+
+- **Build the rows, then count them.** A `panel(title, rows)` helper that filters falsy children and returns nothing on an empty result cannot fall out of step, because the question it asks is "did anything render". Each row already returns nothing when its own value is absent, so the panel's condition comes free.
+- **The tell is a boolean expression naming columns sitting directly above markup that names more columns than the expression does.** Count both sides.
+- ⚠️ **This class is invisible on fixture data and obvious on real data.** A case that creates one fully-populated record renders every card, so the fixed and unfixed versions are identical under test. Open a record with the shape production actually has.
+- **Run the same audit in the other direction: diff the FORM's field list against the record page's.** A field somebody can type into and never see again is the same defect with no wrong guard needed, and it needs no mechanism at all to happen: three fields on this form were write-only simply because nobody had added them to the page.
+
+### Before designing a case around a switch, prove the switch can be thrown
+
+**A branch can be real, reachable in production, and undrivable from the test environment, and finding that out belongs in discovery rather than in the run.** The cost of getting it wrong is a case that looks reasonable in review and cannot be made to pass.
+
+**Measured while scoping a feature-gate case.** The plan was "turn the licence feature off, assert the upgrade screen, turn it back on". Reading the console's own source found the checkbox is rendered `disabled` whenever the feature is a **plan default**, and the test tenant's plan includes it, so the switch cannot be thrown at all. Turning the feature off actually meant downgrading the whole plan, which strips five other features tenant-wide, mid-run, in a serialised suite.
+
+- **Read the control's disabled condition, not just its label.** A toggle that exists is not a toggle you can operate.
+- **Price the blast radius in shared state before writing the case.** Anything stored per tenant and not reset between tests is a change every later case inherits, and a crash between the change and its `finally` leaves the rest of the run testing a different product.
+- **When the harness genuinely cannot reach a branch, push it down a tier rather than dropping it.** A component test with a mocked context proved both halves of this gate in twenty lines and touched no shared state. **The coverage map then cites a test id**, which a reader can check in seconds, instead of an assertion that the state is unreachable.
+- ⚠️ **Correct the premise out loud if you have already asked for a decision on it.** The scoping question here was put to the user on the wrong facts, and the answer changed once the real mechanism was on the table.
+
+### A case's own prose can promise more than its assertions deliver, and no gate reads either half
+
+**Parity gates match case IDs, button names and outcome messages. None of them reads what a case says it does, and none reads how much of it the code actually checks.** So a runbook step saying "assert every field" can sit over a spec asserting two thirds of them, indefinitely, in a repo where every gate is green.
+
+**Measured on a round-trip case.** The runbook's step read "assert **every** rendered field"; the spec asserted **14 of 21** on the download half. The seven it skipped are exactly the half a download-only regression breaks, and the case had been passing for months.
+
+- **When a case's step says "every", make the spec enumerate rather than list.** Drive the assertion from an array the case owns, so adding a field to the array is the only edit, and a missing one is a diff rather than an absence.
+- **Read the two halves side by side once per area review**, in the direction nobody polices: for each promise the runbook makes, find the assertion. The reverse direction (every assertion has a case) is the half that already has a gate.
+
+### The helper family with `fill` and `expect` and no `clear`
+
+**A widget wrapper that can set a value and read it back, but not empty it, quietly puts one branch out of reach: the validation that fires when a defaulted-but-required field is emptied.** The gap is invisible because the two helpers that exist look like a complete pair.
+
+**Measured on a date field.** `fillDate` types digits into the focused section, so `fillDate(page, label, '')` types nothing and leaves the value intact. The case asserting "this required field refuses an empty value" therefore drove nothing and failed on the assertion rather than on the gesture, which reads as an app bug.
+
+- **The clear gesture is worth measuring in the real browser once and then sharing.** For a sectioned date field it is select-all then delete, which is not guessable from the fill helper.
+- **Put it beside its siblings in the shared helpers**, not inline in the one spec that needed it first: the next area with a defaulted required field needs the same twenty characters.
+- **The general shape: for every input helper you have, ask what the EMPTY case needs.** A required field's most interesting state is usually the one the default hides.
+
+### A locator that matches nothing satisfies every absence assertion
+
+**`toHaveCount(0)`, `not.toBeVisible()` and `toHaveText([])` are all true of a scope that resolves to no element**, so a broken selector does not fail: it passes, and it passes for the opposite of the reason the case was written.
+
+**Measured across two area reviews on the same day**, both reaching for the same component. A split-screen panel drew its surface with a plain container rather than the library's card primitive, so a scope written as "the card whose text is the panel's title" matched **zero** nodes. In one area that turned eleven column headers into zero and failed loudly. In the other it failed loudly in two cases and **passed** in a third, whose only assertion was that an empty pane renders no headers.
+
+- **Pair every absence assertion with a positive anchor in the same scope.** Assert something you know is inside it before asserting what should not be. This is the ungated-positive-control rule applied to scopes rather than to personas.
+- **When two areas hit the same missing hook, fix the component, not the two specs.** The right hook here was a named landmark, which the app already used elsewhere for significant panels: it is an accessibility improvement first and a selector second, and it arrived for every one of the eight surfaces that render that panel.
+- **A workaround that scopes wider (to the page's main region, say) hides the gap rather than closing it.** It works, and the next area rediscovers the same thing.
+
+### `getByText('NaN')` matches "Tenant", and other substring accidents
+
+**A locator given a STRING matches a case-insensitive substring.** So a short, all-caps token, exactly the kind an assertion reaches for when checking that a rendering failure did NOT happen, matches any longer word containing those letters in any case.
+
+**Measured:** a case asserting no `NaN` reached the screen resolved to the app shell's own tenant-name heading, `Test TeNANt`, on a page that was rendering perfectly. The failure reads as an app defect, and the screenshot beside it shows a correct page, which is the signal to suspect the locator rather than the app.
+
+- **Pass a REGEX when you mean the token and not the substring.** A regex is matched case-sensitively and takes word boundaries.
+- **Scope it to the content region as well.** The shell's chrome, the tenant name, the version footer and the nav labels are on every page and are not what any page-level assertion is about.
+- ⚠️ **A word boundary written through a shell heredoc can arrive as a BACKSPACE byte**, which makes the corrected assertion vacuous in a new way. `od -c` on the line is the check, and the byte reads as `08`; a linter rule for control characters in regexes is the durable fix.
+
