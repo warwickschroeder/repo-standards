@@ -3021,6 +3021,86 @@ Measured: MUI's `Alert` defaults to `role="alert"`, and a form's blue "here is w
 - **The distinction is event versus furniture.** An `Alert` reporting an outcome, a failed save, a refused sync, correctly stays an alert.
 - **A11y lens check:** dump the accessibility tree and look for `live="assertive"` on anything the page always shows.
 
+### A case that fails on its own locator proves nothing about what it exists to prove
+
+**A red case is not a finding until you read what the assertion actually reached.** Two cases in one run each failed on their *first* step, one on a strict-mode violation from a loose text match, one on a guessed control name that matched nothing and burned the full test budget. Both were then declared "test bugs" and fixed. Behind each of them, unreached, sat a **real app defect** that the case had been written to catch: a required-field rule that drew its marker and blocked nothing, and a hide toggle that changed a table beside the form and left the form alone.
+
+- **Read the error, not the colour.** A locator error names what was *not* found; the failure screenshot beside it names what was there instead.
+- **Fix the locator, then re-run before concluding anything.** A case that goes green on the second pass was a test bug; a case that fails *further down* on the second pass has just found something.
+- **This is why an early-failing step is worth hardening even when it looks trivial.** A weak assertion at step 1 is a lid on every step under it.
+
+### A rename lives in TWO populations inside one spec, and fixing the shared one hides the other
+
+When a heading, a label or a message changes, a spec holds it in two places: **shared helpers** and **individual case bodies**. Correcting the helper makes the file look maintained and leaves every inline copy stale — and because the helper is what a reviewer reads first, nobody looks further.
+
+Measured: a detail-page heading changed; the spec's `openXDetail` helper was corrected sixteen days later; the assertion three lines below it inside a case was not. That case could not have passed for three weeks, in a file every gate called green. The identical stale literal was sitting in a sibling area's spec at the same time.
+
+- **After any copy change, grep the whole spec DIRECTORY for the old literal**, then check each hit is a helper or a case body and fix both.
+- **Hold a changed literal as one exported constant** where the same string is asserted more than twice, so there is one place to change.
+- ⚠️ **No parity gate reads a `getByText` literal, a heading name or a validation message.** Those three are exactly the strings a copy change breaks.
+
+### A capability guarded by a registry lookup is only as real as the registry's contents
+
+A form asking `isEnabled('someField')` of a config map that has no entry for that field is a feature that has never once run, and the code implementing it reads as evidence that it works. No type error (the key is simply absent from a `Record`), no gate, no test.
+
+Measured: a log form guarded its depth carry-forward on a registry listing only one other field, so a fresh form on a fully-logged hole opened blank while three sibling forms carried theirs. A second form had the identical dead branch.
+
+- **When a case is about a behaviour a registry switches on, read the registry before writing the case**, or the case documents a feature that does not exist.
+- **Pin it where the registry lives.** One line asserting the key exists cannot go stale the way a form test can.
+- **It is also a configuration gap**, not only a behaviour one: a settings sheet listing one toggle per registry entry cannot offer a toggle that is not there.
+
+### Two matcher traps that make an assertion say the opposite of what it means
+
+- **A string passed to a text matcher is a CASE-INSENSITIVE SUBSTRING.** So "this page prints no `NaN`" resolved to one element on a page carrying none: the tenant name in the header, `Test Te**nan**t`. Use a **regex** for any absence assertion about a short token; a regex is case-sensitive by default.
+- **A table's column headers do not exist until the table has rows.** An empty table renders its empty state instead, so a case checking that a newly-required field gained a column has to look **after** the write, not before. The same applies to any assertion about a header, a footer or a sort control on a list that starts empty.
+
+### A rule added after the data exists locks every record that predates it
+
+**Ask what an EXISTING record does when the form opens, not only what a new one does.** Where a validator's input is *derived from stored columns* rather than typed, every row saved before the rule arrived opens in an error state, and it refuses the whole record rather than the one field: the reader came to fix a comment and is told a depth is wrong.
+
+Measured: a maximum interval length was added to a log form, and the edit form back-calculates that length from two stored depths. Every row in the tenant predated the rule, so **not one record could be corrected**, and nothing failed anywhere: the validator is right, the form is right, and the two together are a wall.
+
+- **Write the case from the legacy record's point of view.** "Open a record whose stored value predates the rule, change something else, save it" is a case that only exists once someone asks the question; a suite built from create-then-edit fixtures can never reach it, because its own fixtures always satisfy the new rule.
+- **Grandfather on the value the record LOADED with**, not on a stored "legacy" flag, so tightening is always allowed, loosening never is, and a create is unaffected.
+- **Keep it in the warning tier with its OWN advice line.** The standard "double-check this if it is unexpected" is wrong when the value is expected and has a known fix; two tiers sharing one tail is how a warning ends up giving advice nobody can act on.
+- **The data is usually the other half of the bug.** A fixture or seed generator writing rows the app itself refuses deserves its own issue against whoever writes them; the grandfather path stands regardless, because real imported data carries legacy values too.
+
+### A defect can be invisible on every fixture the suite builds and obvious on real data
+
+**A harness fixture is minimal by design, and minimal is exactly where a volume defect hides.** A list missing its shared height cap rendered nearly 3,000px tall on a real record with 43 children and *identically to the fixed version* on the two-row fixture every case creates. A green suite is evidence about correctness, never about volume.
+
+- **Open one real record per area, with real counts, at least once.** It costs a minute and it is the only thing that reads like a user's screen.
+- **Where a volume behaviour matters, assert the MECHANISM rather than the outcome.** `getComputedStyle(el).overflowY === 'auto'` holds on any fixture; a height assertion depends on the viewport and on how many rows the fixture happened to hold, so it is either flaky or vacuous.
+- Same family as the "N of N rows" rule: the fixture and the product can disagree, and the fixture usually wins the argument by being what everyone looks at.
+
+### Rendered copy is the one text no parity gate reads
+
+**Gates match button names, outcome messages and case IDs. Punctuation inside a template literal is invisible to every one of them.** Four banned em dashes had been on screen since the feature shipped, through every gate and every green run, and **three unit tests asserted the em dash by regex**, so the suite was actively defending it. They were found by reading an approved screenshot.
+
+- **After changing any rendered string, grep the specs AND the unit tests for the words either side of the edit**, in quoted and regex form. A regex assertion survives a literal sweep, which is what makes this class durable.
+- **A runbook's own quoted literals rot the same way and in the flattering direction.** One file asserted a detail-page heading for weeks after the page changed, while the spec three feet away had been corrected, because ID-matching parity saw nothing. Hold a heading in the spec as a named constant and re-derive the runbook's quoted strings from the app rather than reading them back out of the runbook.
+- **This is the argument for approved screens, stated concretely.** No assertion in any tier reads punctuation, casing or crowding; a picture does.
+
+### A shared navigation helper that returns early hides a fixture written behind it
+
+**An "already there, nothing to do" short-circuit is a sensible optimisation and a trap for any case that seeds AFTER arriving.** The page goes on showing what it rendered at mount, so a row written a moment ago is simply absent, and the case fails on a locator fifteen seconds later as though the app never stored it.
+
+Measured: a helper skipped its navigation when the URL was already the record's. A case created a parent, landed on it, seeded a child, clicked the child's tab, and read a count of zero over a row that was in the database the whole time. The failure named a missing element; the cause was a `return` three files away.
+
+- **Where a case seeds after arriving somewhere, leave and come back through the app.** That is usually the honest user path anyway: a row that arrives by sync arrives while the user is looking at something else.
+- **Suspect this whenever a fixture "did not stick" but the database says otherwise.** Assert the seed's own postcondition inside the seeding call, so a genuine write failure reports at the seed rather than at the assertion.
+- **Read the shared helper before blaming the write.** Its early exits are exactly the part nobody re-reads.
+
+### A scope guess fails silently in the flattering direction
+
+**Narrowing an over-broad query to zero matches looks like progress in the diff and is a worse assertion than the one it replaced.** A class-based scope that matches nothing produces an empty list, and an assertion written as "contains X" then reports a clean, meaningless pass.
+
+Measured twice in one run: a header sweep returned eleven entries because the app's **sidebar** uses the same typography class for its section headings; the scope added to fix it targeted a component that paints its surface with a plain container rather than the library's Paper, so it matched nothing at all.
+
+- **Prefer a landmark to a class when excluding chrome.** `getByRole('main')` cannot silently drift the way a styling class can.
+- **Assert the expected list EXACTLY, not with `contains`.** An exact match is what reported both mistakes; a containment check would have passed over the first and hidden the second.
+- **Read the component's own markup before scoping to a library class.** "It looks like a card" is not evidence that it is one.
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated
