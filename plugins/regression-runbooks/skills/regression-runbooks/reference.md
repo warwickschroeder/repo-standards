@@ -3134,6 +3134,18 @@ Measured: a case opened a search-labels help tip and asserted `getByText(/Filena
 - **Read the failure screenshot before suspecting the app.** It showed the tooltip open and word-perfect, which pointed at the locator in seconds; the error text named only the ambiguity.
 - **Suspect this class whenever a long-passing case fails with no code change**, and the string it asserts is also a label, badge or column header.
 
+### Widening a uniqueness key from per-user to per-tenant breaks tests that are not about uniqueness
+
+**When a match key loses a scoping column, every fixture that shares a literal payload collides, and the failures land nowhere near the change.** The tell is precise and worth memorising: **giving each test its own identity stops isolating it**, because identity is exactly what left the key. A skipped write leaves no record, so the case fails several assertions later on the missing thing, not on the collision: `Sequence contains no elements` from a `SingleAsync`, or a success panel that never appears because the response said "nothing to do".
+
+Measured: a repeat-upload rule keyed on *this requester's* bytes became keyed on *anybody's* bytes. Six backend tests and two e2e cases broke at once and not one of them was about duplicates. They broke on shared literal bodies (`"data"`, `"hi"`, one shared search marker), each of which had been perfectly safe while the requester was part of the key.
+
+- **Grep the suites for literal fixture payloads before running anything.** A key that loses a column is a mechanical search, not a discovery exercise.
+- **Work out which lane's isolation you were relying on.** A suite whose teardown deletes what each test created hides *cross-test* collisions and leaves only the ones *inside* a single test; a suite sharing one database per class with no teardown breaks across tests. Same root cause, two completely different failure distributions, and theorising before you know which one you are in wastes the run.
+- **Where a case genuinely needs several records to share a searchable marker, share the marker and not the bytes.** Add a per-copy discriminator beside it (`Paging marker {run}. Copy {n}.`) so the search still matches all of them and no two records are byte-identical. Dropping the shared marker instead would delete the thing the case exists to prove.
+- **Re-derive what the message about a match may say, not just which records match.** A uniqueness key and a visibility rule are independent. Once the earlier record could belong to someone else, the notice naming it was handing out an id whose page answers 404, offering an action that answers 403, and saying "you already did this" about a colleague's work.
+- **Run the whole suite, not the module that owns the rule's runbook.** Per-module targeting is right for changes whose reach is per-module; a rule every module writes through is not one. The same widening had shipped a day earlier signed off at 69/69 on its own module and left two cases red in another for a day.
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated
@@ -3800,3 +3812,50 @@ Where the harness spawns a bundler's dev server from the same working directory,
 - **Scope it to the content region as well.** The shell's chrome, the tenant name, the version footer and the nav labels are on every page and are not what any page-level assertion is about.
 - ⚠️ **A word boundary written through a shell heredoc can arrive as a BACKSPACE byte**, which makes the corrected assertion vacuous in a new way. `od -c` on the line is the check, and the byte reads as `08`; a linter rule for control characters in regexes is the durable fix.
 
+### A round-trip fixture must not use a value the app would have generated anyway
+
+**The every-field both-ends round-trip (§3d) proves a value survived the trip only if the app could not have produced that value on its own.** Where a column is *sometimes* derived, a fixture that happens to agree with the derivation makes the case green whether the write survived or was silently regenerated, and the case reads as the strongest evidence in the file.
+
+**Measured on a core-recovery form, 2026-08-30.** An optional "core loss" field was overwritten on **both** save paths by `run length minus recovery`, so a geologist measuring the void in a core tray and typing `0.2` stored `0.5`. The field had been decoration since it was written. The round-trip case filled it with `0.5` on a 0 to 5 interval at 4.5 recovery, which is exactly what the derivation produces, so it asserted `0.5` and got `0.5` for months.
+
+- **Pick at least one fixture value the app could not have guessed.** The smell is a fixture whose numbers are all internally consistent: depths that add up, a percentage that matches its parts, a total that equals its components. Consistency is what makes it readable and also what makes it blind.
+- **The class is wider than a derived column.** Any value the app can supply on its own (a default, a carried-forward field, a stamped user or date, a computed label) is one the round-trip cannot distinguish from a survivor.
+- **Give the defect its own case rather than repairing the round-trip.** The round-trip's job is column *coverage*, so changing its fixture narrows what it proves elsewhere. A dedicated case can also cover clearing the field, which the round-trip never touches.
+
+### The capture script drives states the suite never did, so it finds defects the suite cannot
+
+**Approved-screens capture (§11) is not paperwork; it is a second pass over the area with a different bias.** A spec builds each fixture from nothing inside its own case, so it only ever meets the app in states its own setup produced. A capture script seeds one richer world once and then walks it, which puts the app into combinations no case creates.
+
+**Measured 2026-08-30.** A capture script's overlap step timed out, and the cause was an unlogged-depth warning firing about a gap the user was nowhere near. Every case in the file created its own gap in the same save, so none of them could ever see an *existing* gap being reported against an unrelated run. The suite had passed 24 of 24 minutes earlier.
+
+- **Treat a capture-script timeout as a finding, not a script bug.** The first instinct is to fix the locator. Read what is actually on screen first: a dialog intercepting a save is invisible to a locator waiting on the message that save would have produced.
+- **Seed the capture world to be messy on purpose.** A gap between records, a record with a zero in a field everyone fills, a parent already at its limit. Those are the states real data is full of and fixtures are not.
+- **It composes with the coverage map.** Anything the script surfaces is by definition a branch no case owned, which is exactly the row the map was missing.
+
+### A parameter name that disagrees with its call site is the whole diagnosis
+
+**When a function's declaration and its caller name the same argument two different things, one of them is wrong about what the function does, and reading either alone will not tell you which.**
+
+**Measured 2026-08-30.** Two repositories declared `findGaps(holeId, totalDepth)` and both callers passed a *new interval's start depth*. The body used the argument only for the trailing gap and reported every interior gap regardless, so it answered a question nobody had asked: it listed unlogged stretches **deeper** than the record being saved. Reading the declaration alone reads as correct. Reading the call site alone reads as correct. The two lines side by side answer it in seconds.
+
+- **Grep the call sites of any function whose behaviour you are questioning, before reading its body.** The argument names at the call site are what the callers believe, and the body is what they get.
+- **The same tell covers a defaulted parameter a second caller inherited.** A shared component whose copy or behaviour names one caller's domain noun is right where it was born and wrong everywhere it was reused; make the noun a required prop so a third caller cannot forget.
+
+### Uniformity is the tell for a shared-wrapper bug; DIFFERENCE between two adjacent surfaces is the tell for a per-site one
+
+**Two opposite reading strategies, and using the wrong one on a page finds nothing.** Where N sibling surfaces are all wrong the same way, the cause is upstream and the fix belongs in the thing they share. Where N minus one are right and one is not, the odd one is almost never a decision, because a decision would have left a comment.
+
+**Measured 2026-08-30 in the same review as the entry above.** A list row rendered a value guarded as `{value && …}`, so a legitimate zero printed as a bare digit stuck to the previous number. The sibling row two hundred lines below, in the same file, for the same shape of record, used an explicit null check and was correct. Nothing shared was broken; one site was.
+
+- **Read the neighbours before reading the docs.** The sibling that got it right is both the diagnosis and the patch.
+- **Both strategies want a count.** "Six of the seven tabs pass this constant" and "one of eleven labels has no gloss" are each a sentence a reviewer can check; "this looks inconsistent" is not.
+
+### Hovering N glosses in a loop hits strict mode on the second one
+
+**A tooltip does not close when the pointer moves away; it closes after the library's leave delay.** So a loop that hovers each glossed label in turn and asserts `getByRole('tooltip')` finds **two** open on its second iteration and fails on strict mode, not on anything about the app. The failure text names the two tooltips, which reads like a duplicate-rendering defect and is nothing of the kind.
+
+**Measured 2026-08-30**, on a case checking that each of three read-only fields explains itself. Moving the pointer to `0, 0` between iterations was not enough, and the screenshot beside the failure showed a correct page with one tooltip mid-fade.
+
+- **Close it deterministically, do not wait it out.** `await expect(tip).toHaveCount(0)` after parking the pointer is an assertion, so it waits exactly as long as it needs to and no longer.
+- **Assert `toHaveCount(1)` BEFORE the text.** That is what makes the text assertion about the gloss you just hovered rather than about whichever tooltip happens to resolve first, and it is the positive-control rule applied to a locator that can legitimately match more than one node.
+- **The same delay is why a tooltip turns up in a screenshot.** A capture script needs the pointer parked *and* a settle, and focus blurred as well, because these open on focus too.
