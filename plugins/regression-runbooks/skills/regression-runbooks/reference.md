@@ -687,6 +687,40 @@ Two corollaries worth keeping:
 - **Treat a utility/token name collision as its own defect class.** Before trusting any `*-accent`, `*-primary` or `*-muted` spelling, grep the theme mapping for what that name actually resolves to. The bug is invisible precisely because the code says the right word.
 - **Never accept `outline-none` without a replacement in the same class list.** That pairing is greppable across a repo in one command and is worth checking as a sweep, not one screen at a time.
 
+#### Naming a per-column control after its column makes every loose locator on that column ambiguous
+
+**2026-08-30, DrillLogify Workspace.** A grid's per-column filter buttons were all labelled `Filter this column`, which is the defect the help rules name: N identical controls, and a screen-reader user with no way to tell which column they are on. Renaming them `Filter by Total Depth` fixed that and broke three cases in the same run, because the column's **sort** control is also named `Total Depth`, and `getByRole('button', { name: /Total Depth/i })` had been unambiguous for exactly as long as the filter button said nothing useful.
+
+The same shape appeared twice more in one file. A list row's expander was labelled `Show columns for {name}`, so it collided with the row's own body button, whose composite accessible name **starts** with `{name}`. And a duplicate is named `{name} (Copy)`, which **contains** the original in full, so a `filter({ hasText: name })` matched two rows from the moment the duplicate case had run.
+
+- **The a11y fix is right and the spec is what moves.** Anchor rather than loosen: `{ name: 'Total Depth', exact: true }` for the sort control, `new RegExp('^' + name)` for a composite name, `filter({ hasNotText: name + ' (Copy)' })` for the original.
+- **Before naming a control after a value, grep the specs for that value.** Every existing loose locator carrying it becomes a strict-mode violation waiting for the next run, and the failure reads as a selector bug rather than as the consequence of an improvement.
+- **The tell in the error is the word `aka`.** Playwright's strict-mode message prints a disambiguating locator for each match, and it is usually the fix verbatim.
+
+#### A case that can only fail SLOWLY is a case nobody re-reads
+
+**2026-08-30, DrillLogify Workspace.** Three cases clicked a button from the wrong page: it lives on the viewer, and they clicked it straight after Save, from the editor. Each burned the full 150-second timeout, so one spec file spent seven and a half minutes proving nothing, and the noise buried the real failures either side of it.
+
+The pre-existing case had the same bug, and the runbook recorded **18/18 green** twice over it. Whether it ever passed is now unknowable: the button may have moved pages, or the case may simply never have run since it was written.
+
+- **A timeout is a different signal from an assertion failure, and it should be read differently.** An assertion failure says the app disagrees with the case. A timeout says the case is looking somewhere the app is not, which is usually a navigation the case skipped.
+- **When a suite's wall-clock jumps, look for a case that waits rather than one that works harder.** Sort the run's per-case durations: anything at or near the configured timeout is a locator waiting on something that will never appear.
+- **Extract the navigation into a helper the moment two cases need it**, so the page a control lives on is stated once and cannot drift per case.
+
+#### A `goto` at a LOCAL-ONLY entity can outrun the save that was about to persist it
+
+**2026-08-30, DrillLogify Workspace.** The rule preferring in-app navigation over `page.goto` is usually about cost: a reload re-initialises the app's client-side database, so a wait fails on a locator and sends you hunting the wrong thing. For an entity that lives **only** in that database, with no server copy, it is worse than slow. The app debounces its saves, so a `goto` issued shortly after a write can beat the flush and the record is simply gone: the page renders "not found" and the failure reads as a broken fixture.
+
+- **Ask what a reload costs the ENTITY, not just the page.** Where the store is client-side and the write is debounced, a reload is a data risk rather than an expense.
+- **Navigate in-app and the question does not arise**, because the record is still in memory and the route change re-initialises nothing.
+
+#### Two stacked dialogs need two WAITED Escapes, and the survivor hides the whole page
+
+**2026-08-30, DrillLogify Workspace.** A capture script pressed Escape twice to close a guide stacked over an editor. The library animates the close, so the second key landed mid-transition and did nothing. One dialog stayed open, its modal left the app root `aria-hidden`, and **every** subsequent role query resolved to nothing. The failure surfaced three steps later as a missing navigation link.
+
+- **Close in a loop that waits for the dialog count to drop**, then assert the page root is no longer hidden. Two presses in a row is not two closes.
+- **When a locator that has always worked suddenly finds nothing, look for an open modal before looking at the locator.** An `aria-hidden` root is invisible in the error message and explains every failing query at once.
+
 #### Hand-rolled empty and error panels converge, and then an outage reads as "nothing to do"
 
 **2026-08-09, Forge.Translation.** Eleven screens each styled their own "X is unavailable right now" card and their own empty card, and both had drifted into the same bordered grey panel with the same muted sentence. A reviewer meeting the error state sees an empty queue and goes home satisfied. §8's "four designs, not one" only holds if **one component** owns loading, empty and error: the error variant needs a distinct icon in the danger colour and `role="alert"`; the empty variant needs a subject icon and an invitation to act.
