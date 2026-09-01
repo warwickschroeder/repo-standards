@@ -666,6 +666,47 @@ Pair it with a **cross-persona** control where the cost is one extra context: as
 
 ---
 
+#### A capture script's navigation budget is a real constraint, and it fails as a locator timeout
+
+**2026-09-01, DrillLogify.** Where the app boots a client database and validates a tenant on every page load, each `goto` costs a whole boot's worth of API calls. Cross the auth rate limit and the app renders a refusal screen instead of the page, so every control the script wants is absent and the run dies on whichever locator it happened to be waiting for. Nothing in that error mentions throttling. A capture script for three help routes used three `goto` calls plus four storage-write-and-reload theme switches, which is eight boots against a 20-request-per-60-second limit; two runs were spent hunting a heading locator that was never the problem, while every sibling script in the same folder used exactly ONE `goto`, the login, and clicked for the rest.
+
+- **One `goto` per script, and it is the login.** Reach everything else by clicking, which is also more honest about the paths a reader actually has.
+- **Switch theme, locale or any other shell setting through the UI**, never by writing storage and reloading. A menu click costs nothing; a reload costs a boot.
+- **Assert the refusal screen explicitly after every navigation.** A helper that races the wanted heading against the throttle heading turns a fifteen-minute hunt into a one-line message.
+- **Where a page genuinely has no in-app path, take its `goto` last and pause first**, and say why in a comment or the next person deletes the pause.
+
+---
+
+#### A contrast audit that does not composite alpha reports confident nonsense
+
+**2026-09-01, DrillLogify.** Design tokens are routinely semi-transparent (a soft accent wash is typically the accent colour at 10 to 15 percent), so reading a background as opaque compares a colour against itself. A first pass reported an accent-on-accent-wash pairing at **1:1**, which is not a state any design system ships, and said nothing at all about the line that was genuinely failing. Fixing the compositing cleared the false positive and surfaced a real 2.59:1 on the one sentence explaining why a card had nothing to click.
+
+- **Walk the ancestor chain collecting every non-transparent background, then composite from the root down.** Stopping at the first painted ancestor is not enough when that ancestor is itself translucent.
+- **Composite the foreground too.** Text colours carry alpha as often as backgrounds do.
+- **Take the large-text exemption from the computed style**, not from a guess: 18.66px bold, or 24px regular.
+- **A ratio of exactly 1.00 is the tell** that the measurement is wrong, not the page.
+
+---
+
+#### `getByRole` name matching is a substring match, and a RegExp name is case-sensitive where a string is not
+
+**2026-09-01, DrillLogify.** A reference page listing sibling concepts is all substrings: on a fifteen-section glossary `Projects` also resolved `Deleted Projects` and `Drill Holes` also resolved `Planned Drill Holes`, and two cases died on strict-mode violations that read like missing sections. Separately, a helper built its name as `new RegExp('^' + mode + '$')` from a lower-case argument, so `/^dark$/` matched nothing against a menu item reading `Dark` and the run died on a 30-second click timeout that read like a missing control.
+
+- **Pass `exact: true` whenever the name comes from a list**, because a list is exactly where one entry can be a prefix of another.
+- **Build a name from a variable as a STRING with `exact: true`, never as a RegExp.** String matching is case-insensitive and RegExp matching is not, and the difference only shows up as a timeout.
+
+---
+
+#### Two controls on one page cannot share an accessible name, and that is the app's defect
+
+**2026-09-01, DrillLogify.** A page header's back control (leave the page) and an in-page stepper's back button (previous step) were both named `Back`. A locator cannot choose between them, and neither can anyone using a screen reader: the same word, twice, for two different destinations. Three cases failed on the one collision.
+
+- **Treat a strict-mode violation on a NAME as a possible app defect rather than automatically a locator bug.** Ask whether a person could tell the two apart; if not, the page is what needs fixing.
+- **Rename the control that can afford a longer name**, which is almost always the in-page one. A shell control's name is shared by every page and cannot move.
+- **Target a shell control by its label** (`getByLabel('Back')`) rather than by role and name, so the next page that adds its own `Back` does not break it.
+
+---
+
 #### A harness that pins its outbound seams but inherits its login is only half-hermetic, and the inherited half fails as a timeout
 
 **2026-08-26, Forge.Translation.** The harness took real trouble over its integration seams: it forced every provider onto the stack it spawned, in **both** directions, keyed by run mode so a mode could not be added without one, specifically so a developer's local config could never turn a suite run into a live-service run. Then it took the **sign-in mode** from that same local config file. Every spec authenticates through the app's dev header scheme, so on a machine configured to sign in with real identity the suite could not run at all: the readiness gate waits for seeded test personas, the endpoint that serves them is gated on the flag that was off, and the wait expires after eight minutes naming nothing. The developer's standing workaround was to edit two lines before a run and edit them back afterwards, and forgetting the second edit silently changed how their own next manual run authenticated.
