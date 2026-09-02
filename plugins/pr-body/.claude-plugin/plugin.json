@@ -1,0 +1,13 @@
+{
+  "name": "pr-body",
+  "version": "0.1.0",
+  "description": "Draft a pull request body from a branch diff. Reads what actually changed rather than the commit subjects, verifies every claim against source, and writes three sections: what is wrong today, what it looks like afterwards, and test coverage. Dense bullets, no filler sections, work left undone goes to an analysis note instead of a 'future work' paragraph.",
+  "author": {
+    "name": "Warwick Schroeder",
+    "url": "https://github.com/warwickschroeder"
+  },
+  "homepage": "https://github.com/warwickschroeder/repo-standards",
+  "repository": "https://github.com/warwickschroeder/repo-standards",
+  "license": "MIT",
+  "keywords": ["pull-request", "pr-body", "review", "git", "documentation", "changelog"]
+}
