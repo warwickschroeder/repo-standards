@@ -3221,6 +3221,42 @@ Measured: a repeat-upload rule keyed on *this requester's* bytes became keyed on
 - **Re-derive what the message about a match may say, not just which records match.** A uniqueness key and a visibility rule are independent. Once the earlier record could belong to someone else, the notice naming it was handing out an id whose page answers 404, offering an action that answers 403, and saying "you already did this" about a colleague's work.
 - **Run the whole suite, not the module that owns the rule's runbook.** Per-module targeting is right for changes whose reach is per-module; a rule every module writes through is not one. The same widening had shipped a day earlier signed off at 69/69 on its own module and left two cases red in another for a day.
 
+### A page-wide tooltip query resolves the one you did not hover
+
+**A tooltip that opens on FOCUS as well as hover turns every hover assertion into a race with whatever the test last clicked.** Reaching a page by clicking its navigation entry both focuses that control and parks the pointer on it, so if the navigation carries hints, its tooltip is still open while the case hovers something else. `getByRole('tooltip')` is page-wide, so it resolves **two** elements and dies in strict mode.
+
+Measured 2026-09-04: **four of nine failures in one run, one cause**, on a page whose whole review was about adding the glosses those cases assert.
+
+- **Blurring the active element is not enough, and half-fixing it is worse than not fixing it.** Blur alone repaired three of the four and left the rest failing intermittently, which reads as flakiness rather than as one deterministic bug. Park the pointer somewhere inert **and wait for the tooltip count to reach zero** before hovering. That is an assertion on observable state; a blur plus a delay is a hope about timing.
+- **Put it in one helper.** Every hover assertion in the file needs it, and a per-case fix is a per-case omission waiting to happen.
+- ⚠️ **A tooltip whose title is a rich node sets no `title` attribute at all**, so an attribute check on it passes vacuously; a string title with `describeChild` does set one. Two component shapes, two different assertions, and only one of them can be checked without hovering.
+- **The repo's own screenshot-capture scripts usually know this already**, because a stray tooltip ruins an image the same way it ruins an assertion. Read the sibling capture script before writing hover assertions.
+
+### An absence that names a DIFFICULTY is a guess, not a stated absence
+
+§8 already requires an `absent:` row to name a **case ID** or a **mechanism**. The third shape is the most persuasive and the least checkable: **an absence that says how hard the state is to set up.**
+
+Measured 2026-09-04, three in one file, all wrong: *"seeding this needs the full QC engine"* (a dev fixture was registered on `window`, and in the end four lines through the repository did it); *"that shape isn't reachable from a batch alone"* (true, and it was reachable on the sibling record by the recipe the file's own neighbouring case already used); and *"no user-facing trigger"* for a state that arrives by sync from another device. All three had been re-read and re-skipped for months, because a cost sounds like engineering judgement.
+
+- **The test is whether a reader can check the sentence in seconds.** "It needs the QC engine" cannot be checked. "`__seedMixedBatch` writes into its own demo dataset, so it cannot reach a batch this file made" can.
+- **Grep the runbook for "needs", "requires" and "would have to"**, and re-derive every hit on each pass. Absences rot fastest: they are written once, when the branch was inconvenient, and nothing revisits them.
+
+### A smoke case cannot both start empty and assert the populated chrome
+
+**A precondition of "none, an empty tenant is a valid state" is a claim about which chrome exists**, and on a list page it is the wrong one. Growing a framing case to also assert the table and its column headers broke it, because on an empty tenant the page renders an empty state and there is no table at all.
+
+- **The framing case owns the POPULATED page**, because that is what a user sees on every day but the first. Seed one row.
+- **The empty board is its own case**, in the tier where a reader looks for it.
+- The failure screenshot answered this in one glance and the error text ("element not found") would not have, which is §8's rule about looking before theorising, in its cheapest possible form.
+
+### Check a new case title against the parity gate's own exemption words
+
+**A runbook-to-spec parity gate that exempts headings by a bare-word match will silently drop an ordinary case whose title happens to use one of those words, and then blame the other side.** A case titled *"the retired list URLs land here"* matched an exemption for `retired`, left the runbook side of the comparison, and the gate reported the **spec** as holding a test with no case, sending the reader hunting for a heading that was right there in the file.
+
+- **Read the exemption regex before naming cases**, and keep its vocabulary out of titles.
+- **When a parity gate reports a one-sided mismatch you can see with your own eyes, suspect the exemption before the parser.**
+- **The gate should name the exemption it applied.** The same word caused this twice in one repo three days apart, which is the argument for the message rather than for more discipline.
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated
@@ -3934,3 +3970,129 @@ Where the harness spawns a bundler's dev server from the same working directory,
 - **Close it deterministically, do not wait it out.** `await expect(tip).toHaveCount(0)` after parking the pointer is an assertion, so it waits exactly as long as it needs to and no longer.
 - **Assert `toHaveCount(1)` BEFORE the text.** That is what makes the text assertion about the gloss you just hovered rather than about whichever tooltip happens to resolve first, and it is the positive-control rule applied to a locator that can legitimately match more than one node.
 - **The same delay is why a tooltip turns up in a screenshot.** A capture script needs the pointer parked *and* a settle, and focus blurred as well, because these open on focus too.
+
+### A parity gate whose exemption marker is an ordinary English word exempts cases by accident
+
+**A 1:1 runbook-to-spec gate usually grows an escape hatch for a case that genuinely cannot be automated, and the cheapest hatch is a marker word in the case's own heading.** That works right up to the day a case title happens to use the word for its own reasons.
+
+**Measured 2026-09-02.** The exemption pattern was `/retired|stated absence|manual-only|integration.test reference/i`, applied to the whole `### TC-…` line. A new case titled *"the retired URLs still land somewhere useful"* was silently dropped from the runbook side of the comparison, and the gate then reported the **spec** as carrying a test with no case, which sends the reader hunting for a heading that is plainly in the file.
+
+- **Two costs, and the second is worse.** A case can go uncovered in a repo every gate calls clean, and the failure message names the wrong side of the pair.
+- **The fix is a marker a title cannot contain by accident:** a bracketed tag (`[no-spec]`), a symbol, anything that reads as deliberate. A word does not.
+- **Until then: word case titles around the marker words**, and when a 1:1 gate reports a one-sided mismatch for an ID you can see, check the exemption before you doubt the parser.
+
+### A shared formatter's copy change leaves every OTHER area's spec red, and nothing reports it
+
+**An area review that sweeps a rendered string reaches every area rendering it, and the specs of those areas do not run that day.** So the change lands green, the neighbours go red, and they stay red until somebody happens to run them.
+
+**Measured 2026-09-02.** One review changed a shared priority formatter from `3 — Normal` to `3 · Normal`. A neighbouring area's spec asserted `'1 — Highest'` with `exact: true` in two places, so that suite had been failing 14/16 for a day with nothing reporting it: no parity gate reads a `getByRole('option', { name })` literal.
+
+- **After a copy change to anything shared, grep EVERY spec in the repo for the literal**, in quoted and regex form, not only the specs of the area you are in. Then re-run the areas that hit, or say plainly in the runbook that they are owed.
+- **An area review's blast radius is not its own directory.** The tell is a string that comes from a shared component, a util or a model rather than from the page.
+
+### Count the RENDERED affordance, never the source occurrences, when auditing help coverage
+
+**A gloss prop that a wrapper reads only inside one branch type-checks, renders nothing, and leaves the group one label short.** Grepping the prop then reports full coverage over a page where one label reads as having no help, which is the group-inconsistency defect arriving through a prop rather than a decision.
+
+**Measured 2026-09-02.** A suite picker accepted `labelHelp` but honoured it only in its `stacked` branch, so a form passing the prop without `stacked` had 15 glossed labels and a sixteenth with none.
+
+- **The probe is one line:** a `page.evaluate` filtering every element under `main` whose computed `textDecorationStyle` is `dotted`, asserted against the field count.
+- **Pair it with one hover** that reads the tooltip back, so the count cannot be satisfied by an underline with no title behind it.
+- Same family as *A prop that reaches nothing looks exactly like one that works*, and the same answer: read the rendered result, not the call.
+
+### A child record mapped onto a parent-level stage of a shared lifecycle lies on every row
+
+**Where one progress bar serves several record types, its stages belong to different records, and a mapping function must not place a child on a stage only its parent can reach.** The vocabularies read alike, so the mapping looks obviously right.
+
+**Measured 2026-09-02.** A six-stage strip ends at *Approved*, which is a parent record being signed off by a person. The child's mapper returned that stage for a status meaning "the laboratory validated this reading", so **64,022 of 64,022** child rows drew a completed lifecycle while their parents sat unreviewed, and the parent's own page contradicted them one click away.
+
+- **Give the child its own furthest-honest stage and let the existing fold do the lifting.** The behaviour the fold was written for survives; what goes is the claim made when the fold has nothing to add.
+- **The audit is per stage, not per mapping:** for each stage, ask *which record's action puts something here*. Any stage answered by a record other than the mapper's input is a defect waiting.
+- ⚠️ **One mapper, several areas.** Grep its callers before editing, and name in the runbook which other areas' specs are now owed a run.
+
+### One `error` state for a failed load and a failed action throws the page away
+
+**A details page's render usually turns its single `error` into a full-page "could not load this record" screen.** Every failure the page can have then goes through it, including the ones that happen while the record is on screen and perfectly readable.
+
+**Measured 2026-09-02.** A refused delete, a failed status transition and a blocked action all wrote to that one state, so pressing a button replaced the record with an error screen offering only "Back to the list". The runbook had even recorded that one of them was "surfaced in the top Alert"; there was no top alert, and never had been.
+
+- **Two states:** `error` means there is no page; `actionError` renders as a dismissible inline alert and leaves the content standing. The message itself does not change.
+- **The tell is a `catch` inside a handler calling the same setter the initial load calls.** Grep each details page for its error setter and check which call sites run after a successful load.
+- ⚠️ **An absence assertion cannot prove the fix**: a page rendering nothing also has no error screen. Assert the record's own `h1` **and** a second body element are still there.
+
+### A derived figure that reads zero because its join never matches says the work was never done
+
+**A count derived through a relationship that no real row carries is not an empty result, it is a wrong statement**, and it is stated in the app's own confident voice, often with a colour behind it.
+
+**Measured 2026-09-02.** A composition strip derived its quality-control counts through a foreign key that **0 of 12** rows on the dev tenant actually carried, so all 40 parent records read `0 QC · 0.0% insertion` in warning amber, over records whose own columns recorded nineteen QC inserts, while a list row two clicks away reported `QC 133/133 pass`. Three surfaces, three answers.
+
+- **When a derived count is zero on 100% of real rows, the DISPLAY needs fixing whatever the cause.** Do that first; it is true either way.
+- ⚠️ **Then search the tracker before writing down WHY the join is empty, the sibling repo included.** The first write-up of this concluded that nothing wrote the foreign key. A search found the write path own issue already CLOSED, and the real root cause filed one hop earlier: no row carried the key the FIRST join needed, so no record could have had linked children whatever its own key said. One seed gap, two areas of consequences, and a duplicate issue avoided.
+- **The display needs the stored figure as its fallback, with both labelled** (see the stored-versus-derived rule): state the recorded number when nothing has linked, and name the drift only when the two disagree.
+- ⚠️ **The harness may not be able to reach the linked branch at all** if only one narrow flow writes the key. Say so in the Coverage map, point the linked case at the unit test that *can* seed it, and let the runbook own the fallback branch.
+
+### A stored vocabulary wider than a form's pick-list makes that control an out-of-range Select
+
+**A `Select` over a column with no canonical enum offers the app's curated list, and the database holds whatever earlier importers wrote.** A record carrying a token the list does not have renders in the closed control, matches no option, and is lost the moment any other field on that record is saved.
+
+**Measured 2026-09-02: 9,146 of 64,022 rows** carried a unit token absent from the form's four options, and the same token reached the reader raw on three read surfaces while a neighbouring page resolved it.
+
+- **Append the record's own value to the options** wherever a closed list sits over an open column, so an edit cannot silently rewrite it.
+- **Resolve the token for display through the one function that already knows how**, and list in the conventions doc which surfaces do and which are still owed.
+- **The tell is a column the schema types as a free string while the form offers a fixed list.** Query the distinct stored values before trusting the list.
+
+### A `page.evaluate` probe waits for nothing, so it must follow an assertion
+
+**The probe helpers this skill encourages, a heading-level dump, a gloss count, a DOM-node count, are all plain `page.evaluate` calls, and an evaluate has no auto-waiting at all.** Called straight after a navigation it reads whatever is on screen at that instant, which on a page that loads its record asynchronously is the loading state.
+
+**Measured 2026-09-02.** One case read an **empty** heading list and its failure said `expected [] to have length 1`, which reads as a page with no `<main>`. Another read a gloss count of 7 against 8 and read as one missing gloss. The screenshot beside each showed the page mid-load.
+
+- **Every evaluate follows an assertion that its subject is rendered:** `await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()` before the outline dump, `await expect(page.getByRole('table')).toBeVisible()` before counting anything in a table.
+- **Prefer a per-item assertion to a total.** Naming each header and asserting its own affordance makes a regression say *which* one lost it; a single count says only that a number moved, and it changes for legitimate reasons (a chip that renders only when its figure is non-zero).
+- Same family as the fixed-`sleep` mistake: assert on observable state, and never read a snapshot at an arbitrary moment.
+
+### A defensive `.catch` around a locator action does not make it cheap, it makes its timeout silent
+
+**`await page.getByRole(...).click().catch(() => undefined)` on a control the page does not render waits the full test timeout and then swallows the rejection.** The case fails on time with every one of its real assertions already passed, and the log names no locator, because nothing was reported.
+
+**Measured 2026-09-02:** one such line, written to tolerate a tab strip that a single record's page does not carry, spent **150 seconds** of a case whose assertions had all completed in eight.
+
+- **Delete the line, or gate it on a count:** `if (await locator.count()) await locator.click()`, which is immediate.
+- **The tell is `.catch(() => undefined)` or `.catch(() => {})` on a Playwright action.** Grep for it: each hit is either a full timeout in waiting or an assertion nobody is making.
+
+### Where a list can gain an entry conditionally, assert the COUNT of it, not its presence
+
+**A `toBeVisible()` on an option matches the first of two identical options and reports success**, so it cannot see a duplicate, which is exactly what a conditionally-appended entry produces.
+
+**Measured 2026-09-02.** A form appended a record's legacy stored token to a pick-list whose every option renders through a normaliser, and the legacy token normalised to something the list already had, so the reader was offered **two entries reading the same thing** and no way to tell them apart. `toHaveCount(1)` caught it; `toBeVisible()` had passed.
+
+- **The rule generalises past options:** any locator whose subject a change can duplicate wants a count. A row, a chip, a heading, a button that a conditional branch can render twice.
+- Same shape as the ungated-positive-control rule: an assertion satisfied by *one* of the things it describes is not an assertion about the set.
+
+### A best-effort assertion with a long timeout is a silent tax on every test that runs it
+
+**`await expect(x).toBeY({ timeout: 10_000 }).catch(() => {})` is the shape.** It reads as defensive, it never fails, it logs nothing, and when the condition it is waiting for has *already happened* it spends the whole timeout every single call. The cost only ever shows up as "the suite feels slow", which is not attributable to anything.
+
+**Measured 2026-09-02.** A shared sync helper clicked a button and then waited up to ten seconds for that button to *look* disabled, with a comment explaining that "a trivial sync may be too fast to observe". It was: the cycle finished before Playwright saw the disabled frame on nearly every call. Four cases, before and after: **20.9 → 12.0s, 23.0 → 13.3s, 21.0 → 11.1s, 30.8 → 12.5s.** Across the **356 `sync()` call sites** in that suite the line was worth about **50 minutes**.
+
+- **Wait on the app's own completion event, and arm the listener BEFORE the action.** A cycle finishing in a millisecond still increments a counter; no polling interval can miss it. Where the bus is module-private, attach the listener from inside the page (`await import('/src/events/...')` in a `page.evaluate`) and poll a `window` counter with `waitForFunction`.
+- **Grep the harness for `.catch(` adjacent to an `expect(...)` with a `timeout`,** and cost each one at `timeout × call sites`. That is the number, and it is usually a surprise.
+- ⚠️ **Do not "fix" it by shortening the timeout.** That trades a big silent tax for a small one and keeps the race. The measurement above did try 1.5s first: it was 8% slower than the event and still guessing.
+
+### Know which term you are optimising before you optimise anything
+
+**Measured on one 43-case suite, 2026-09-02, so the order of attack is not a guess:**
+
+| what | cost | notes |
+|---|---|---|
+| a setup `create*` call | **~2.2s** | it drives a real form. A six-step chain costs ~13s before the case starts |
+| a `sync()` | **~8.5s** | almost all fixture waste, not transfer: the payloads were **1 to 8 rows** |
+| a `goto` | **~1.5-3s** | it re-initialises the client-side database |
+
+The case that took longest with **zero** syncs had ten setup creates and ran 29s. So:
+
+- **Fix the shared fixture first.** One line reached 356 call sites.
+- **Then the setup chains.** A case that is not testing a form should seed through the repository, not by driving six of them. ⚠️ Balance this against the repo's own rule about real-CRUD seeding: convert the *mechanism*, never the assertions, and never in a case whose subject IS the form.
+- **Then the gotos.** Real, but the smallest term: converting 13 of them saved less than one sync-heavy case did.
+
+⚠️ **A `goto` count is still worth watching, for a different reason.** It measures how much of the app's own navigation the suite never traverses, which is a coverage question rather than a speed one. Measure it per test and compare across areas: 44 specs averaging 0.14 made the one sitting at 0.91 obvious, and that one was the area under review.
