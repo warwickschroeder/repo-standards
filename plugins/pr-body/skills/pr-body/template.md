@@ -1,24 +1,20 @@
-# <A claim, not a label. What is true after this branch.>
+# <The PR title: one line, sentence case, an imperative verb and the thing it acts on. Paste into the title field, not the body.>
 
-<Two or three sentences of plain language. What class of problem existed, what the change does about it, and what stays the same in production. This is the only prose in the document.>
+> <Only when the branch is stacked: the PR it sits on, and "Review against that branch, not `<default>`.">
 
-## What is wrong today
+## What this adds
 
-- **<The defect, stated as a claim.>** <The evidence: the file, the mechanism, and what it costs someone.>
-- **<The second one.>** <Same shape.>
-- **<A defect that repeats across backends or modules.>** <Say it once, list the sites, do not give each one its own heading.>
+<One or two plain sentences: what the change is for.> **<What it deliberately does not do yet, so nobody reviews it for something it never claimed.>**
 
-## What it looks like afterwards
-
-- <The headline change, one line.>
-- <The consequence a reviewer cares about, in terms they already understand.>
-- **<A grouped area, for example a backend or a subsystem.>** <Every site in it, semicolon-separated, one bullet.>
-- **<A second grouped area.>** <Same shape.>
+- **<A piece of the change, named in plain words.>** <What it does, with the real `Identifiers` in backticks, and any limit a reader would assume away.>
+- **<The next piece.>** <Same shape. One to three sentences, never four.>
+- **<A shape repeated across backends or modules.>** <Say it once and list the sites; never a heading each.>
 - **<A defect fixed in passing.>** <Deliberate, not collateral. Say so.>
-- **<Deliberately unchanged.>** <The site that looks like it should have been changed, and the reason it was not, so nobody finishes the job later.>
+- **<Deliberately unchanged.>** <The site that looks like it should have moved, and the reason it did not, so nobody finishes the job later.>
+- **<A file changed for a reason its folder does not explain.>** <Why it is in this branch at all.>
+- **Docs.** <Where they live and what links to them.>
 
-## Test coverage
+## Tests
 
-- **<What the test proves, not what it is called.>** <How many, what they assert, which backends they run on.>
-- **<The test that would have caught the defect above.>** <Name the connection explicitly; it is the strongest thing in the document.>
-- **<A test-infrastructure change that looks arbitrary.>** <The reason, or it reads as a fudge.>
+- `<TestProject/Folder>`: <what they prove, not what they are called, and which backends they run on.>
+- `<NewTestProject>` (new): <what it covers, and why it had to be its own project.>

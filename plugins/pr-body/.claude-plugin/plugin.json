@@ -1,7 +1,7 @@
 {
   "name": "pr-body",
-  "version": "0.1.0",
-  "description": "Draft a pull request body from a branch diff. Reads what actually changed rather than the commit subjects, verifies every claim against source, and writes three sections: what is wrong today, what it looks like afterwards, and test coverage. Dense bullets, no filler sections, work left undone goes to an analysis note instead of a 'future work' paragraph.",
+  "version": "0.2.0",
+  "description": "Draft a pull request body from a branch diff. Finds the branch's real base, reads what actually changed rather than the commit subjects, verifies every claim against source, and writes two sections: what this adds, and tests. A short opener naming what the change deliberately does not do yet, then dense bullets, no filler sections, and work left undone goes to an analysis note instead of a 'future work' paragraph.",
   "author": {
     "name": "Warwick Schroeder",
     "url": "https://github.com/warwickschroeder"
