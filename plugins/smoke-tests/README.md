@@ -15,6 +15,16 @@ A **6-phase workflow**:
 5. **Write it** — four sections; each step is title, action, `**Expect:**`.
 6. **Self-check** — mechanical format gates, then: could a cold reader follow this, and tell pass from fail on every step?
 
+## Running one
+
+Asked to run a smoke test, the skill drives every step in a real browser and proves each `**Expect:**` with saved evidence, then always delivers the same three things:
+
+- **A run report** (`template-run-report.md`): every step with a fixed verdict and the observed values quoted, findings sorted by priority, corrections to the script, what held up, and the state left behind.
+- **An evidence folder**: `stepNN-` screenshots, database queries with their output, raw API calls with status and headers, server-log excerpts and the full browser console.
+- **A published evidence page**, built from the two, with every step's screenshots and outputs one click away.
+
+Every finding is then raised in the project's tracker. Three scripts ship with the skill: `driver.mjs` (a long-lived Playwright browser driven one step at a time), `shrink-shots.mjs` (screenshots to small JPEGs) and `build-evidence-page.mjs` (the page). Detail: `skills/smoke-tests/running.md`.
+
 ## Install
 
 ```
@@ -27,6 +37,7 @@ A **6-phase workflow**:
 ```
 /smoke-test release        # everything since the last tag
 /smoke-test <topic>        # one change, from the branch diff
+/smoke-test run <file>     # run an existing smoke test and report with evidence
 ```
 
 Or just ask: *"write a smoke test for this"*, *"what should a tester target before this release?"*
@@ -38,6 +49,7 @@ Or just ask: *"write a smoke test for this"*, *"what should a tester target befo
 | `.claude/smoke-tests/profile.md` | Repo profile — how to run, sign in, reach the DB/API, tag a release. Written once, updated on drift. |
 | `<smoke-test-dir>/YYYY-MM-DD-<topic>-smoke-test.md` | A change smoke test, committed with the implementation. |
 | `<smoke-test-dir>/YYYY-MM-DD-release-since-<tag>-smoke-test.md` | A release smoke test, written before the tag is cut. |
+| `<run-report-dir>/YYYY-MM-DD-smoke-run-<topic>.md` | A run report, with its `-evidence/` folder beside it. The profile names the folder. |
 
 ## The rule that matters most
 

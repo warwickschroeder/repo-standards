@@ -36,7 +36,7 @@
     {
       "name": "smoke-tests",
       "source": "./plugins/smoke-tests",
-      "description": "Write short, plain-language smoke tests a human runs by hand — for one change, or for everything since the last release so a tester can target only what changed.",
+      "description": "Write short, plain-language smoke tests a human runs by hand, and run them with saved evidence for every step: screenshots, database queries, API calls and logs, ending in a run report and a published evidence page.",
       "category": "testing",
       "keywords": ["testing", "smoke-test", "release", "qa", "manual-testing"]
     }

@@ -1,6 +1,6 @@
 ---
 name: smoke-tests
-description: Use when asked to write a smoke test — a short, plain-language script a human runs by hand to prove a change works, either for one change or for everything since the last release so a tester can target only what changed. Scopes from the diff, inlines the steps from the repo's regression runbooks so the tester never navigates away, and flags cases that belong in a runbook permanently.
+description: Use when asked to write a smoke test (a short, plain-language script a human runs by hand to prove a change works, for one change or for everything since the last release) or to run one. Writing scopes from the diff, inlines the steps from the repo's regression runbooks and flags cases that belong in a runbook permanently. Running executes every step in a real browser, proves each Expect with screenshots, database queries, API calls, server logs and console counts, and always ends with a run report, an evidence folder and a published evidence page.
 ---
 
 # Smoke Tests
@@ -92,6 +92,37 @@ grep -c '\*\*Expect:\*\*' <file>               # one per step
 
 Then read it as the tester: **could someone who has never seen this change follow it, and could they tell pass from fail on every step?** A step whose Expect is "it works" has no pass condition.
 
+## Running a smoke test
+
+When asked to **run** a smoke test (any file in the smoke-test folder, or "run the release smoke test"), every run produces the same three deliverables, whether every step passes or not:
+
+1. **A run report** from `template-run-report.md`, in the folder the profile's §6 names: every step with a fixed verdict and the observed values quoted, findings sorted by priority, corrections to the smoke-test document, what held up, and the state left behind.
+2. **An evidence folder** beside it, every file prefixed `stepNN-`: screenshots, saved queries and their output, raw API calls with status and headers, server-log excerpts, and the full browser console.
+3. **A published evidence page**, built by `scripts/build-evidence-page.mjs` from the report and the evidence, with every step's screenshots and outputs one click away. Give the user its link.
+
+Then every finding is raised in the project's tracker, one item each, before asking the user anything.
+
+### The run workflow
+
+| Phase | What happens | Detail |
+| --- | --- | --- |
+| **R1 Prepare** | Read the smoke test, the profile and the runbook profile. Record the exact versions under test. Ask once, as a multi-select, about anything the environment can't reach (production, staging) and about starting servers if the profile doesn't say. | `running.md` §R1 |
+| **R2 Drive** | Run `scripts/driver.mjs` from the scratchpad: one persistent Playwright browser with its own profile, one step per call, navigating the way a user does, a screenshot of every state an Expect describes. | `running.md` §R2 |
+| **R3 Prove** | Prove each Expect with the strongest evidence it allows, usually two kinds: the screen plus the database, the API, the server log, the console count or the app's local store. Quote what you saw. | `running.md` §R3 |
+| **R4 Judge** | One verdict per step from the fixed vocabulary. Investigate every deviation in the source before working around it: it is a defect or a document error, never just a note. | `running.md` §R4 |
+| **R5 Report** | Write the report, re-verify each load-bearing finding against the server, shrink the screenshots, build and publish the page, raise the findings. | `running.md` §R5 |
+| **R6 Clean up** | Restore every setting changed for the run; list the test data and running processes left behind in the report. | `template-run-report.md`, *State left behind* |
+
+Read `running.md` §R6 before the first step: its gotchas each cost a run a restart.
+
+### Run non-negotiables
+
+- **A step is not done until its evidence is saved.** An observation that exists only in your context is not evidence; the user reads the folder and the page, not the transcript.
+- **Every Expect line is checked, not the gist.** A step with four Expect lines and three met is a FAIL, even when the end state is right.
+- **Never rewrite an expectation to fit the output.** Decide from the source whether the app or the script is wrong; the first is a finding, the second a document correction.
+- **Nothing is skipped silently.** A step that can't run here is `NOT RUN` with the reason, or run against a proxy and labelled so.
+- **Leave the environment as you found it**, and say exactly what you could not put back.
+
 ## Non-negotiables
 
 - **Only on request.** Never write one because a change felt significant. Offer; let the user decide.
@@ -116,6 +147,10 @@ Then read it as the tester: **could someone who has never seen this change follo
 | Writing a step (worked examples, good vs. bad) | `reference.md` §4 |
 | Reaching what the UI can't (curl, SQL, test-auth headers) | `reference.md` §5 |
 | Format gates | `reference.md` §6 |
+| Running one: preparation, driving, evidence, verdicts, report | `running.md` §R1 to §R5 |
+| Gotchas that cost a run a restart | `running.md` §R6 |
+| Blank run report | `template-run-report.md` |
+| Browser driver, screenshot shrinker, evidence-page builder | `scripts/driver.mjs`, `scripts/shrink-shots.mjs`, `scripts/build-evidence-page.mjs` |
 
 ## Common mistakes
 
@@ -127,4 +162,8 @@ Then read it as the tester: **could someone who has never seen this change follo
 - **Inventing a screen** for a surface that has none, or quoting a control label from memory.
 - **Referencing a fixture the step never creates** — `-F "files=@some.txt"` is curl error 26 for every tester whose working directory doesn't happen to contain it.
 - **Silently dropping what can't be tested by hand** rather than naming it and what covers it.
+- **Running one and reporting in chat only.** The report, the evidence folder and the page are the deliverable; a chat summary scrolls away.
+- **Calling a step a pass on its end state** when one of its Expect lines failed on the way there.
+- **Working around a blocked step without finding out why.** The blocker is usually a defect worth more than the step.
+- **Blaming the app for your own locator**: a regex that only matches the plural, a hidden twin element, a button whose accessible name differs from its label.
 - **Treating a migration as ordinary.** If migrations run at startup, a bad one is a boot failure, not a bug — pre-flight it as step 1.

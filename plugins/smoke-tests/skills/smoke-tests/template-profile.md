@@ -50,3 +50,15 @@ only adds what is release- and deploy-specific.
 ## 5. Repo-specific gotchas
 
 <Appended as they are learned. A stale label, a control that isn't what it looks like, a limit the client enforces before the server, an endpoint whose response shape changed. If the repo has a runbook profile, the general gotchas live there — keep only the release-specific ones here.>
+
+## 6. Running a smoke test
+
+| | |
+| --- | --- |
+| Run reports | <folder for `YYYY-MM-DD-smoke-run-<topic>.md` and its `-evidence/` sibling, e.g. `.local/Analysis/`; say whether it is gitignored> |
+| Starting servers | <may the session start the app, the API and the database itself, or does the user run them? the exact commands, and which log files to keep> |
+| Playwright | <the package.json that resolves `@playwright/test` for `scripts/driver.mjs`; any browser install step> |
+| Sign-in for the driver | <the persona menu or login path the driver clicks; how long a dev session survives a reload; any auth rate limit a boot spends> |
+| Local store | <how to query the app's own client-side data from the page, if it has any (the module to import, the HMR trap)> |
+| Findings | <where defects found during a run are tracked, and the conventions file for raising them> |
+| Not reachable from here | <production and staging access: who has it, and whether a local proxy run is acceptable> |

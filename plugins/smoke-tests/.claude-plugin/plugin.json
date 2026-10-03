@@ -1,7 +1,7 @@
 {
   "name": "smoke-tests",
-  "version": "0.6.0",
-  "description": "Write short, plain-language smoke tests a human runs by hand — for one change, or for everything since the last release so a tester can target only what changed. Scopes itself from the diff, reuses the repo's regression runbooks instead of restating them, and pushes permanent cases back into them.",
+  "version": "0.7.0",
+  "description": "Write short, plain-language smoke tests a human runs by hand, for one change or for everything since the last release, and run them: every step driven in a real browser, every Expect proved with screenshots, database queries, API calls and logs, ending in a run report and a published evidence page.",
   "author": {
     "name": "Warwick Schroeder",
     "url": "https://github.com/warwickschroeder"
@@ -9,5 +9,14 @@
   "homepage": "https://github.com/warwickschroeder/repo-standards",
   "repository": "https://github.com/warwickschroeder/repo-standards",
   "license": "MIT",
-  "keywords": ["testing", "smoke-test", "release", "qa", "manual-testing", "runbooks"]
+  "keywords": [
+    "testing",
+    "smoke-test",
+    "release",
+    "qa",
+    "manual-testing",
+    "runbooks",
+    "evidence",
+    "playwright"
+  ]
 }
