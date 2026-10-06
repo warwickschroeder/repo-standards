@@ -3257,6 +3257,30 @@ Measured 2026-09-04, three in one file, all wrong: *"seeding this needs the full
 - **When a parity gate reports a one-sided mismatch you can see with your own eyes, suspect the exemption before the parser.**
 - **The gate should name the exemption it applied.** The same word caused this twice in one repo three days apart, which is the argument for the message rather than for more discipline.
 
+### A case that mutates shared state must restore it in a `finally`
+
+**A case that changes tenant-wide or server-side configuration and restores it *after* its assertions restores nothing when an assertion fails, and the next cases inherit the change.** Measured on a laboratories area: one case made a field required, failed on a locator, and never reached its reset. The setting persists server-side and the harness does not truncate it, so two later cases that created a record were refused by a validation rule they never mentioned, **two tests later and in a different tier**. Two of three remaining failures were collateral, and neither error named the cause.
+
+- **Put the restore in a `finally`, and put it in ONE function.** A restore copied per case is a restore that will be missing from the third call site.
+- **The tell in the log is an error naming a field, dialog or setting the failing case never touches.** Read upward for the last case that changed shared state, rather than debugging the innocent one.
+- ⚠️ **Not tier-specific.** The same session hit it in the unit tier: a throw left an unconsumed one-shot mock return in the queue, so the next two tests read the wrong stubbed row and failed with assertions about unrelated booleans. In both tiers, one failure presents as three unrelated bugs.
+
+### Never build an accessible name out of record data
+
+**A confirm dialog whose header action and confirm button share a visible word genuinely needs a distinguishing accessible name, and interpolating the record's identity into it is the wrong fix.** Measured: `` `Delete laboratory ${labName}` `` gave a laboratory called `Cancel Lab 7039885` the confirm-button name `Delete laboratory Cancel Lab 7039885`. Playwright matches accessible names by **substring** by default, so `{ name: 'Cancel' }` then resolved to two buttons and the cancel path died.
+
+- **Use a static, action-shaped label.** The app already had seven such call sites and all seven were static (`Confirm delete project`, `Confirm cancel dispatch`). The record's name belongs in the dialog **body**, which already carries it.
+- ⚠️ **The defect's visibility depends on the test data.** A sibling case with identical code passed because its record was called `Plain Lab`. That is this class's signature: it reads as flaky and is not, and in production it surfaces as one unluckily-named customer record.
+- **Before inventing a label shape, grep the other call sites of the same prop.**
+
+### A one-shot `count()` in a setup or teardown helper is a race
+
+**`locator.count()` does not retry**, so branching on it inside a helper reads whatever the DOM happens to hold at that instant. A teardown helper that did `if (!(await gear.count())) { navigateToArea(); openPanel(); }` read `0` while a modal panel was still animating open, took the fallback branch, and then waited out the full test budget for a tab the now-open modal had made `aria-hidden`.
+
+- **The symptom is "passes alone, fails in the suite."** It passed 8th in a filtered run and failed 43rd in the full one, because load changed the timing. That is exactly what the confirming full run exists to catch, and it is the argument against stopping at a green filtered re-run.
+- **Make setup and teardown deterministic rather than conditional.** Reload to a known state, then navigate, then act. A reload also closes any open modal, which is what makes a subsequent role query safe.
+- ⚠️ **A modal removes the page behind it from the accessibility tree.** Any `getByRole` aimed at background content will time out rather than fail fast, so this class always costs the maximum.
+
 ## §9 Test-case ID scheme
 
 `TC-<AREA>-<TIER><n>` — stable across the runbook markdown and the generated

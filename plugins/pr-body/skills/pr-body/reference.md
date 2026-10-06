@@ -4,6 +4,24 @@ Worked detail behind `SKILL.md`. Read the section you need.
 
 ## §1 Scoping from the diff
 
+### Finding the real base
+
+A branch is often stacked: it was cut from another branch that is itself still in review, so the PR's base is that branch and not the default one. Diffing against the default branch then produces a body that claims the parent PR's work, which is the single most misleading thing a body can do. The reviewer cannot tell which half of it they are being asked to approve, and the parent's reviewer sees the same work described twice.
+
+```
+gh pr list --state open --json number,title,headRefName,baseRefName
+git log --oneline <default-branch>..HEAD
+git branch -a --list '*<shared-prefix>*'
+```
+
+The tells, in order of reliability:
+
+- **An open PR whose head branch is an ancestor of yours.** Decisive. `git merge-base --is-ancestor <their-branch> HEAD` confirms it.
+- **The branch name ends in `-2`, `-part2`, `-followup`**, or shares a prefix with another branch that exists.
+- **`git log <default>..HEAD` returns far more commits than the author described.** Two commits of work and ten in the log means eight belong to something else.
+
+When it stacks, open the body with a one-line note naming the PR it sits on and saying to review against that branch. Then scope everything, the diff, the stat and the test reading, to that base.
+
 ### The commands
 
 ```
@@ -25,7 +43,7 @@ git status                              # uncommitted work that is also shipping
 git diff --numstat <base>...HEAD | awk '{ if ($3 ~ /Test/) t+=$1+$2; else p+=$1+$2 } END { print "test", t, "prod", p }'
 ```
 
-Adjust the pattern to the repo's naming. Read the production half in full. On a branch that is mostly tests, read those too: they carry the actual behavioural claims, and the coverage section is written from them, not guessed.
+Adjust the pattern to the repo's naming. Read the production half in full. On a branch that is mostly tests, read those too: they carry the actual behavioural claims, and the `## Tests` bullets are written from them, not guessed.
 
 ### What the commit subjects are good for
 
@@ -38,26 +56,39 @@ Ordering and intent, nothing else. They tell you what the author thought they we
 
 ## §2 Verifying a claim before asserting it
 
-Every "why it was broken" sentence in the body is a claim a reviewer can check in thirty seconds. Check it first.
+Every claim in the body is one a reviewer can check in thirty seconds. Check it first.
 
 | Claim shape | How to verify |
 | --- | --- |
+| "Nothing writes to it yet" | Grep for the type and every method on it. This is the opener's limit clause; getting it wrong is worse than omitting it. |
 | "X overwrote Y" | Read the registration or call order. Confirm X runs after Y, with line numbers. |
 | "This came from Z" | Grep for Z's registration. If several things could have supplied it, say the set, not one name. |
-| "This was untestable" | Confirm there was no seam. A hard-to-reach seam is not the same as none. |
 | "This is the only caller" | Grep for callers, including tests. |
 | "This never worked" | Check the history, or soften to "does not work today". |
+| "No existing caller changed" | Grep for callers of the member you added to, and say it only when the list is unchanged. |
 
-**When verification narrows the claim, write the narrow one.** If a commit says the clock came from YARP, and reading the file shows telemetry, HTTP logging and YARP each register one and any of them could have won, the honest bullet names the set and says which won in the default configuration. That is a better bullet anyway: it explains why the bug was invisible.
+**When verification narrows the claim, write the narrow one.** If a commit says the clock came from YARP, and reading the file shows telemetry, HTTP logging and YARP each register one and any of them could have won, the honest bullet names the set and says which won in the default configuration.
 
 **When verification cannot settle it**, say what you know and stop. Never dress a hypothesis as a finding.
 
 ## §3 Worked bullets
 
+### The opener carries the limit, in bold
+
+```markdown
+Bad:   Adds checkpoint storage for the migration engine.
+
+Good:  Somewhere for the migration engine to keep its progress, so a copy that stops part way can be picked
+       up rather than started again. **Nothing writes to it yet**: no persister implements `IMigrationTarget`,
+       so the table is created empty and only the tests put rows in it.
+```
+
+The bad one invites a reviewer to go looking for the write path and file the branch as incomplete when they cannot find it. Two sentences of prose, and the limit in bold, is the whole opener.
+
 ### The bold lead-in carries the claim
 
 ```markdown
-Bad:   - Registration. The clock is now registered in AddServiceControl.
+Bad:   - **Registration.** The clock is now registered in `AddServiceControl`.
 Good:  - **The host never registered a clock.** One arrived anyway, from telemetry, HTTP logging or YARP, whichever was switched on.
 ```
 
@@ -66,46 +97,52 @@ The first makes the reviewer read the sentence to learn anything. The second is 
 ### Say the cost, not the mechanism
 
 ```markdown
-Bad:   - The validator omits the query terms.
+Bad:   - **Validator change.** The validator omits the query terms.
 Good:  - **Page 2 could carry page 1's version.** The client is told nothing changed and keeps rows from the wrong page.
 ```
 
 ### Group a repeated change, do not repeat it
 
 ```markdown
-Bad:   ## RavenDB
-       - ExpirationManager takes the clock.
-       ## SQL Server
-       - The lifecycle store takes the clock.
-       ## PostgreSQL
-       - The lifecycle store takes the clock.
+Bad:   - **SQL Server.** The lifecycle store takes the clock.
+       - **PostgreSQL.** The lifecycle store takes the clock.
+       - **RavenDB.** `ExpirationManager` takes the clock.
 
-Good:  - **Raven:** `ExpirationManager` computes `@expires` from it; the four archive managers take it, with `MessageArchiver` passing its own down.
-       - **EF Core, so SQL Server and PostgreSQL:** the lifecycle store stamps both timestamps from it across all five transitions.
+Good:  - **Every persister stamps its timestamps from an injected clock.** On EF Core, so SQL Server and
+         PostgreSQL, the lifecycle store does it across all five transitions; on RavenDB `ExpirationManager`
+         computes `@expires` from it and the four archive managers take it.
 ```
+
+### Explain a file whose folder does not explain it
+
+```markdown
+Good:  - **An embedded migration source waits for the server it started.** `EmbeddedDatabase.WaitUntilReady`
+         wraps `GetServerUriAsync`, which is why a migration branch touches `src/ServiceControl.RavenDB`.
+         `Start` only queues the server up, so connecting by the configured URL reached whatever already held
+         the port. No existing caller of `EmbeddedDatabase` changed.
+```
+
+Without the reason, the reviewer reads it as scope creep and asks for it to be split out.
 
 ### Name the deliberate non-change with its reason
 
 ```markdown
-Good:  - **Deliberately still on the machine clock:** `CheckRavenDBIndexLag` subtracts `LastIndexingTime`, which the server reports against its own clock, so an injected one would make the lag meaningless.
+Good:  - **Deliberately still on the machine clock.** `CheckRavenDBIndexLag` subtracts `LastIndexingTime`,
+         which the server reports against its own clock, so an injected one would make the lag meaningless.
 ```
 
 Without this the next reader files it as an oversight and "fixes" it.
 
-### Connect a test to the defect it would have caught
+### The Tests bullets say what is proved, per project
 
 ```markdown
-Weak:   - **Registration tests.** Two new acceptance tests.
-Strong: - **Registration:** a host-registered clock survives `AddServiceControl`; a persistence-only host still resolves one. These catch the `AddSingleton` override.
+Weak:   - `ServiceControl.Persistence.Tests`: new checkpoint tests.
+Strong: - `ServiceControl.Persistence.Tests/EFCore` (new files): the table round-tripping every column, every
+          timestamp coming back as UTC, and five transaction cases including a rollback leaving the previous
+          cursor in place and a save from an out-of-date copy being refused. Runs on SQL Server and PostgreSQL.
 ```
 
-### Explain a test-infrastructure constant that looks like a fudge
-
-```markdown
-Good:  - **365 day retention on SQL Server and PostgreSQL.** Advancing the clock wakes the live retention sweeper, which then deletes rows a test is still using. Retention now outruns any advance; tests that care set their own.
-```
-
-A reviewer who sees a 365 in a test context and no reason assumes someone was making a failure go away.
+One bullet per project or folder. Mark a new project `(new)` and say why it had to be separate, because that is the question a reviewer will ask.
 
 ## §4 What goes in the analysis note instead
 
