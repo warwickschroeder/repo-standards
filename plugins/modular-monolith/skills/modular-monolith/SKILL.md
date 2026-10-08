@@ -17,7 +17,7 @@ So the rules an agent must obey in any given repo are not R1–R35. They are **R
 | --- | --- | --- |
 | [`blueprint/README.md`](blueprint/README.md) | The full blueprint, one file per section, with a read-when index | You need any section's detail |
 | [`blueprint/01-rules-digest.md`](blueprint/01-rules-digest.md) | R1–R35 verbatim — the contract | Before judging any change against the rules |
-| [`areas.md`](areas.md) | The 17 adoption areas: which rules each covers, what "adopted" means, how to audit it | Auditing, recording decisions, or resolving "does R*n* bind here?" |
+| [`areas.md`](areas.md) | The 18 adoption areas: which rules each covers, what "adopted" means, how to audit it | Auditing, recording decisions, or resolving "does R*n* bind here?" |
 | [`alignment.md`](alignment.md) | The audit → pick → align process in operational detail | Running `/blueprint-align` |
 | [`template-roadmap.md`](template-roadmap.md) | The register, plus the surrounding ROADMAP | Creating or restructuring `docs/ROADMAP.md` |
 | [`template-gap-report.md`](template-gap-report.md) | The audit deliverable | Writing the gap report |

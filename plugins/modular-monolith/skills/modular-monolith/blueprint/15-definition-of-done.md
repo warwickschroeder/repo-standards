@@ -30,6 +30,9 @@
       harness left to the user's schedule (§12.6); output **read**, not
       assumed (R25). The CI pipeline steps for the touched layers are green
       (§12.7).
+- [ ] Verified in the running app, with evidence attached: screenshots of the painted result, the console and server log lines that prove it, and the API responses (§12.5). A change no browser can reach, such as a background job's failure path, is verified through the API, the logs and the database, and says why.
+- [ ] **Where a per-screen help guide is read by software at runtime** (§17.1), a change that adds, removes or changes a control updates that screen's guide in the same change. This binds even though §17 is optional, because software that quotes a stale entry gives a confident wrong answer.
+- [ ] Every surface the change adds (a new screen, a new form factor such as phone or tablet, a new interactive surface) has its own Claude Design handoff, committed under `docs/design-handoff/<date>-<surface>/` before its implementation started (§11.2). Small decisions below that size were asked about and recorded where the next export picks them up (§11.3).
 - [ ] UI faithfully realises the committed Claude Design handoff bundle
       (component spec, interaction states, breakpoints, screenshots); styles
       derive from the single token home (no duplicated hexes/sizes); the client

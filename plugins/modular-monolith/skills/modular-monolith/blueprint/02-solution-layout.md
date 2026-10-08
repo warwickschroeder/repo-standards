@@ -13,6 +13,9 @@
 global.json                         # pins the toolchain version (reference stack: .NET SDK)
 Directory.Packages.props            # central dependency-version home — ALL versions here
                                     #   (reference stack: Central Package Management)
+.gitattributes                      # `* text=auto eol=lf`, so a multi-line string literal in a model
+                                    #   cannot make the migration snapshot differ by machine (§8.2);
+                                    #   `*.bat` and `*.cmd` `text eol=crlf`, as cmd.exe misreads LF batch files
 DESIGN.md                           # OPTIONAL derived design summary (§11); not the source of truth
 CLAUDE.md / AGENTS.md               # agent operating instructions — distilled from this blueprint,
                                     #   updated in the same change when a distilled rule changes (§13)
@@ -20,7 +23,9 @@ CLAUDE.md / AGENTS.md               # agent operating instructions — distilled
 .claude/app-documentation/profile.md    # OPTIONAL (§17.1) — what a "part" is here, doc paths, the role model
 .claude/smoke-tests/profile.md          # OPTIONAL (§17.2) — how the app runs, how to sign in, release tagging
 docs/
-  design-handoff/<date>-<surface>/  # committed Claude Design handoff bundle — the design source of truth (§11)
+  design-handoff/<date>-<surface>/  # one committed Claude Design handoff per surface (new screen, form factor
+                                    #   or interactive surface), exported before it is built; the design
+                                    #   source of truth (§11.2)
   ROADMAP.md                        # what's shipped / in progress / deferred (+ deliberate deviations)
   modules/<module>.md               # per-module design & reference doc, kept in step with the code
   specs/<date>-<topic>.md           # per-change design/spec + impact analysis for significant changes (§13.1)
@@ -36,7 +41,9 @@ src/
     <App>.AppHost/                  # orchestrates local dev (DB + API + client in one command)
     <App>.ServiceDefaults/          # telemetry, health, resilience, service discovery
   <App>.Core/                       # module contract, event bus + IEvent, ICurrentUser,
-                                    #   module discovery, auth wiring, shared Contracts
+                                    #   module discovery, auth wiring, shared Contracts,
+                                    #   the outbox (its own schema + migrations), the background-work
+                                    #   queue, the worker-status registry, the actor log-scope middleware
   <App>.Host/                       # the host process — composition root only
   modules/                          # one library/package per feature module, grouped
     <App>.Modules.<Feature>/

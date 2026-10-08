@@ -69,6 +69,6 @@ This repo doubles as a plugin marketplace. Add it once, then install what a repo
 
 The **modular-monolith blueprint** — the org-wide architecture spec — now ships inside the [`modular-monolith` plugin](./plugins/modular-monolith/), split into [one file per section](./plugins/modular-monolith/skills/modular-monolith/blueprint/README.md). It moved there because the plugin mechanism only distributes `plugins/<name>/`, so a copy under `Blueprints/` could never reach another machine.
 
-For an **existing** repo the blueprint is a menu, not a mandate: `/blueprint-align` audits the repo, you adopt or decline each of the 17 areas, and the decisions land in that repo's `docs/ROADMAP.md` as a standing register. Everything downstream — reviews, checks, future agents — is scoped by that register.
+For an **existing** repo the blueprint is a menu, not a mandate: `/blueprint-align` audits the repo, you adopt or decline each of the 18 areas, and the decisions land in that repo's `docs/ROADMAP.md` as a standing register. Everything downstream (reviews, checks, future agents) is scoped by that register.
 
 [`Blueprints/MODULAR-MONOLITH-BLUEPRINT.md`](./Blueprints/MODULAR-MONOLITH-BLUEPRINT.md) is a redirect kept so existing links resolve.

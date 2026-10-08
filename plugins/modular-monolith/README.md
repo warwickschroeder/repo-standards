@@ -41,7 +41,7 @@ One table in `docs/ROADMAP.md`, one row per area, five possible states:
 
 The **reason** matters more than the state. "Declined" invites a future agent to reopen the question; "Declined — module extraction costed at six weeks against no delivery pressure; revisit if a second team joins" closes it.
 
-## The 17 areas
+## Every rule belongs to one of 18 areas
 
 Every rule R1–R35 belongs to exactly one area, so *"does R24 bind here?"* always has an answer. Full catalogue with per-area audit guidance in [`areas.md`](skills/modular-monolith/areas.md).
 
@@ -49,7 +49,7 @@ Every rule R1–R35 belongs to exactly one area, so *"does R24 bind here?"* alwa
 | --- | --- |
 | **Standalone** — no architectural impact | `testing` · `static-gates` · `ci-shape` · `code-quality` · `docs` · `deps` |
 | **Contained** — real code changes, architecture untouched | `security` · `constrained-values` · `seams` · `queries-errors` · `no-poll` · `design-tokens` |
-| **Architectural** — re-architecture projects | `module-isolation` · `data-isolation` · `events` · `api-shape` · `push-channel` |
+| **Architectural**: re-architecture projects | `module-isolation` · `data-isolation` · `events` · `event-durability` · `api-shape` · `push-channel` |
 
 **Partial alignment is a stable end state.** An app that adopts only `testing` and `static-gates` is aligned — to exactly what its user chose.
 
@@ -58,7 +58,7 @@ Every rule R1–R35 belongs to exactly one area, so *"does R24 bind here?"* alwa
 ```text
 skills/modular-monolith/
   SKILL.md              the operating skill — scoping, the three jobs, the failure modes
-  areas.md              the 17 areas: rules covered, what "adopted" means, how to audit each
+  areas.md              the 18 areas: rules covered, what "adopted" means, how to audit each
   alignment.md          the audit → pick → align process in operational detail
   template-roadmap.md   the register + the surrounding ROADMAP
   template-gap-report.md the audit deliverable

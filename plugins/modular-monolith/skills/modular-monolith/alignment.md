@@ -116,7 +116,7 @@ Repos drift, and the register goes stale in a way that is invisible until someon
 
 1. **Check the register against reality first.** Areas marked Adopted that no longer hold are the highest-value finding in the whole review — a rule everyone believes is enforced but is not is worse than one nobody claimed, because it has been trusted.
 2. **Check Adopting rows for staleness.** A transitional state with no movement since its start date is either finished (update it) or abandoned (say so, and let the user re-decide).
-3. **Check Deferred revisit triggers.** Has any fired?
+3. **Check Deferred revisit triggers.** Has any fired? **A run of defects inside a deferred area is a trigger that has fired**, whatever the written trigger says: search the tracker and the history for fixes that land in that area's territory. A deferral is a bet that the gap costs less than closing it, and repeated defects there are the bet being lost. The usual shape is repair machinery built to work around the gap (rescans, resyncs, snapshots around an at-most-once bus) that keeps breaking; present the area again with that evidence.
 4. **Only then look for new gaps**, and only in adopted areas — plus any area whose circumstances changed (a realtime feature arrived, so `push-channel` is no longer N/A).
 
 **Do not re-present declined areas.** They were decided. Re-raising them each review is the exact behaviour the standing-decision rule exists to stop, and it teaches the user that writing a decision down does not make it stick.

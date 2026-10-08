@@ -29,6 +29,15 @@ Where the practice is adopted, these hold:
 - **Diagrams and screenshot placeholders.** Mermaid for the lifecycle, the role hierarchy and the decision flows; keyed screenshot placeholders (`> 📸 **Screenshot \`key\`:** what to capture`) plus an index of keys, so capture can happen later and a missing image is visible rather than silent.
 - **Currency is the real cost.** Roles, workflows or screens change → the guide changes in the same commit, exactly like `docs/modules/<module>.md`. Adopting this practice without accepting that rule produces a guide that is worse than none.
 
+**In-app help that software reads is a different shape, and once it exists its upkeep is not optional.** An app with a help panel on each screen, or an assistant that answers how-to questions, needs help organised by screen, because it is opened from a screen and quoted word for word. Where an app adds one:
+
+- **One Markdown file per route kind, inside the client source** (for example `src/<App>.Web/src/help/<route-kind>.md`), plus one for the ideas that cut across screens. The client bundles them; there is no copy in `docs/`.
+- **Fixed headings in a fixed order** in every screen's file (for example: how to read it, what you can do, things that surprise people), so a reader, human or software, finds the same section in the same place.
+- **Painted labels in bold, quoted from source**, so a reader can match each one to what is on screen.
+- **A coverage test ties route kinds to files**: every route kind has a file and every file has a route kind, and adding a screen fails the test until its file exists.
+- **One source, embedded by any server reader.** A server-side reader (such as an assistant's help tool) embeds the client's files at build time, fails the build when none match, and has its own test listing the screens it found.
+- **A change to a control updates its screen's file in the same change.** Once software quotes the file, a stale entry is a confident wrong answer, so this is a definition-of-done item (§15) for any app that has the help, whether or not it adopted the guides above.
+
 Optionally, the Markdown can be published to **Word/PDF** — a mermaid renderer plus Pandoc with a branded reference document, with the Markdown remaining the single source of truth. Offer it separately; it is a second toolchain to keep working.
 
 What it adds to the tree:

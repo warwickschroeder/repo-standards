@@ -17,6 +17,7 @@ satisfy (everything else in this document holds unchanged whatever is picked):
 
 | Decision | Ask before | The choice must provide |
 |---|---|---|
+| **Ownership boundary** (user / tenant / tenant with roles) | Phase 1 | Who owns the data, as distinct from who is acting. It sets the key every row, query, durable event and push target carries (§6.3), the shape of `ICurrentUser`, and what row security keys on (§8.2). For a tenant: `ICurrentUser` carries both the actor id and the owner id, durable events carry the owner id, each push connection joins its owner's group, and roles are scoped to the owner. Model the owner id apart from the actor id from day one even when they are equal, because moving from user to tenant later touches every table, event contract and push. |
 | **Server language + web framework** | Phase 1 | Lightweight endpoint routing (R17); a DI/composition mechanism with app-lifetime and request/event scopes (R19); a hosted background-worker primitive (R31); an in-process host-testing facility (R24). |
 | **Data access + migrations tooling** | Phase 1 | One data-access context per module; schema-per-module (or nearest equivalent); per-module migrations applied at startup (R7–R10). |
 | **Database engine** | Phase 1 | Relational, one engine app-wide — full options + contracts in **§8**. |
@@ -28,7 +29,7 @@ satisfy (everything else in this document holds unchanged whatever is picked):
 | **Styling system + component library** | Phase 2 | A **single design-token home** the handoff bundle's tokens are lifted into once (§11, R26). |
 | **Test tooling (client + e2e)** | Phase 2 | Unit/component tests, and browser-automation end-to-end (reference stack: Playwright) running as a real-backend regression harness — global-setup stack boot, DB read-back fixture, per-module projects with tier filters (§12.9). |
 | **Authentication mechanism** | Phase 3 | Full options + contracts in **§4.6**. |
-| **Realtime push transport** | Phase 4 (first push feature; the hub stub can wait until then) | Server→client push addressable to a per-user target; authenticable on the socket/connection (§4.5); owned solely by Notifications (R21/R22). |
+| **Realtime push transport** | Phase 4 (first push feature; the hub stub can wait until then) | Server→client push addressable to the data owner (the user, or the tenant's group, per the ownership boundary); authenticable on the socket/connection (§4.5); owned solely by Notifications (R21/R22). |
 
 Cross-stack rules that hold whatever is chosen:
 
@@ -46,6 +47,22 @@ Cross-stack rules that hold whatever is chosen:
 - **Add libraries reluctantly** — a dependency must fill a seam or earn its
   place; prefer the platform's built-ins (the reference stack uses built-in
   SignalR, not a third-party push service, and hand-rolls the event bus).
+- **Runtime module discovery rules out trimming and ahead-of-time compilation.** R5 finds modules by scanning for assemblies and loading them by reflection, which a trimmed or AOT-compiled build cannot do (reference stack: `PublishTrimmed`, Native AOT). If the user wants either, raise it before Phase 1 so discovery is designed for it (for example, generated at build time).
+- **Read a dependency's licence before adding it, and again before taking a new major version.** Pinning the latest stable version can cross a licence change without anyone noticing: FluentAssertions is free under Apache 2.0 up to version 7, and from version 8 needs a paid licence for commercial use, which is why §3.1 names a fork. The `deps` adoption area checks every licence.
+- **A newly published advisory must not break every build.** Restore audits packages against a live advisory database, so with warnings treated as errors (R33(a)) an advisory published overnight against any package, a transitive one included, fails restore on every machine and every branch with no change in the repo. CI then goes red everywhere, an update bot that merges only on green CI stalls, and the pull request that would fix it never merges. Set the audit's level and scope explicitly, keep its findings as warnings in the normal build, and let the separate R33(d) audit step fail on high and critical advisories and on advisory data it could not fetch. Reference stack:
+
+  ```xml
+  <!-- Directory.Build.props. Every build reports advisories as warnings; only the audit step, which sets AuditGate, fails on high and critical, or when it could not fetch the advisory data. -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>moderate</NuGetAuditLevel>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1905</WarningsNotAsErrors>
+    <WarningsNotAsErrors Condition="'$(AuditGate)' != 'true'">$(WarningsNotAsErrors);NU1900;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
+  ```
+
+  `NuGetAuditMode` `all` audits transitive packages whatever the target framework (before .NET 10 the default is `direct`). The audit step runs `dotnet restore --force -p:AuditGate=true`; `--force` matters, because a restore that finds nothing changed can skip the audit.
 
 ### 3.1 The reference stack (used by this document's code samples)
 
@@ -53,13 +70,7 @@ One concrete, known-good decision set — the stack every code sample in this
 document is written in. **Offer it as a suggestion when the user has no
 preference; never adopt it silently.**
 
-- **Server (.NET):** ASP.NET Core Minimal APIs · EF Core (provider per §8) ·
-  .NET Aspire for local-dev orchestration (`AppHost` + `ServiceDefaults`) ·
-  built-in SignalR for push · auth per §4.6 (local-DB JWT reference: JwtBearer +
-  Argon2id) · xUnit + FluentAssertions + `Microsoft.AspNetCore.Mvc.Testing` +
-  **Testcontainers** for every database test (R32). Banned here: MediatR,
-  MassTransit, Wolverine, Rebus, AutoMapper, ArchUnitNET, EF InMemory, Docker
-  Compose (Aspire owns orchestration).
+- **Server (.NET):** ASP.NET Core Minimal APIs · EF Core (provider per §8) · .NET Aspire for local-dev orchestration (`AppHost` + `ServiceDefaults`) · built-in SignalR for push · auth per §4.6 (local-DB JWT reference: JwtBearer + Argon2id) · xUnit + AwesomeAssertions (the Apache 2.0 community fork of FluentAssertions 7, because FluentAssertions 8 and later need a paid licence for commercial use) + `Microsoft.AspNetCore.Mvc.Testing` + **Testcontainers** for every database test (R32). Banned here: MediatR, MassTransit, Wolverine, Rebus, AutoMapper, ArchUnitNET, EF InMemory, and Docker Compose **for the development loop** (Aspire owns orchestration there). A compose file that runs the published image on a server is a deployment choice (§14, Release and operate) and takes nothing from Aspire.
 - **Client (React SPA/PWA):** React + Vite + TypeScript (strict) · Tailwind ·
   shadcn/ui + Radix + Lucide icons · React Router · TanStack Query (server
   state) · React Hook Form + Zod · ESLint as the blocking lint gate · Recharts

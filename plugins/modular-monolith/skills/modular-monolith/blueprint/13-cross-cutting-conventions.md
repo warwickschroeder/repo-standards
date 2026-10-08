@@ -6,9 +6,9 @@
   record → `{ "error": "..." }`) with the right status code (reference stack:
   `Results.BadRequest/NotFound/Conflict/Json`). Don't invent a new error shape
   per endpoint.
-- **Logging:** use the framework's structured logger (reference stack:
-  `ILogger<T>`); **never** raw stdout prints (`Console.WriteLine` & kin) —
-  telemetry and the dev dashboard depend on structured logs.
+- **Logging:** use the framework's structured logger (reference stack: `ILogger<T>`); **never** raw stdout prints (`Console.WriteLine` & kin), because telemetry and the dev dashboard depend on structured logs.
+- **Every log line says whose it is, through scopes rather than text.** Middleware opens an **actor** scope straight after authentication (§5; reference stack: a Core middleware calling `BeginScope` with the user id). Each unit of background work (an outbox delivery, a job) opens an **owner** scope instead, because that work is for an owner and no one person. A **module** scope names the module where the logger category does not, such as a delivery Core runs for a module. The exception handler reopens the actor scope, because the request's own scope has closed by the time it runs. Without them an error cannot be traced to a user, an owner or a module.
+- **What must never be logged depends on where the log goes.** A request body, a header, a token or a connection string is never logged at a level that is stored or shown to admins (Warning and above wherever an operator console captures them, §7.4), and neither is text a user typed (a search, a message); name people and records by id.
 - **Single source of truth:** derive shared definitions from one canonical home;
   a rename there should be a compile/CI break, never a silent runtime drop.
   Never hand-maintain a parallel list that duplicates the canonical.
@@ -69,9 +69,8 @@ observes. For a significant change:
 - Module → module project references. Ever.
 - A shared data-access context; cross-module or cross-schema SQL/joins.
 - Business service interfaces in `Core/Services`.
-- Business logic in the composition root beyond discovery, hub mapping, CORS,
-  health, SPA fallback, and startup migrations.
-- Static state in modules (except the atomic one-time-subscription guard, R16).
+- Business logic in the composition root beyond the admin CLI's argument parsing, discovery, forwarded headers, security headers, static files, CORS, the actor log scope, rate limiting, exception handling, hub mapping, health, SPA fallback, and startup migrations.
+- Static state in modules (except the per-bus subscription guard, R16).
 - The push transport's server API touched outside the Notifications module
   (`IHubContext<...>`).
 - Schema auto-creation instead of migrations (`EnsureCreated`); missing
@@ -114,13 +113,12 @@ stack-agnostic; substitute the chosen stack's equivalents:
   validation (§10's schema layer) improves UX; it is never the enforcement
   point. Invalid input returns the standard error envelope (§13), leaking no
   internals.
+- **Parse enum values by exact name.** A lenient parser can accept input nobody chose (reference stack: `Enum.TryParse` accepts an integer string, which `Enum.IsDefined` catches, and a comma list whose combined flags can land on a real member, which neither `IsDefined` nor a CHECK constraint catches). Match names exactly, or reject digits and commas before parsing.
 - **Headers + CORS.** Serve the standard security headers (HSTS behind TLS,
   `X-Content-Type-Options: nosniff`, a frame-ancestors/CSP appropriate to the
   SPA); CORS allows exactly the known client origin(s). Production **fails
   fast** on a wildcard origin or host (§5).
-- **Rate limiting.** Abuse-prone public endpoints — login above all — get the
-  framework's rate limiter (reference stack: ASP.NET Core `AddRateLimiter`)
-  with named-constant limits (R27).
+- **Rate limiting.** Abuse-prone public endpoints, login above all, get the framework's rate limiter (reference stack: ASP.NET Core `AddRateLimiter`) with named-constant limits (R27) and a named partition key (for login, the client's IP address). Behind a reverse proxy every request arrives from the proxy's address, so one attacker locks everyone out: honour forwarded headers (reference stack: `UseForwardedHeaders`), but only from an explicit list of known proxies, or any client can set the header and dodge the limit. A refusal carries `Retry-After`, which the limiter does not send by itself: set it in `RateLimiterOptions.OnRejected` from `lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)` (a concurrency limiter has no such metadata, so fall back to a named constant there). The client reads it and says how long to wait, so a locked-out user is not told their password was wrong.
 - **Dependencies.** The R33(d) vulnerability audit is the standing gate; treat
   a new dependency as an attack-surface decision (§3's "add libraries
   reluctantly").

@@ -18,8 +18,7 @@ pictures. Expect:
 
 - **Component structure spec** — the components and their hierarchy as a
   structured spec (not pixels).
-- **Design tokens actually used on the canvas** — colors, type, spacing, radii,
-  elevation as token values.
+- **Design tokens actually used on the canvas**: colors, type, spacing, radii, elevation and motion (durations, easings) as token values.
 - **Layout hierarchy + responsive breakpoints + interaction states** (hover,
   focus, active, disabled, empty, loading, error).
 - **Referenced assets** — logos, icons, images.
@@ -35,6 +34,8 @@ pictures. Expect:
 > next handoff stays consistent rather than divergent.
 
 ### 11.2 The pipeline (ingest the bundle → build)
+
+**One handoff per surface, not one per app.** This pipeline runs before the first build **and** before every new screen, every new form factor of an existing screen (phone, tablet) and every new interactive surface (a dialog, a panel, a chat). Each gets its own export, committed under `docs/design-handoff/<date>-<surface>/` before its implementation starts. Without this the first bundle covers the first few screens, every later one is designed by the coding agent one decision at a time, and "realise faithfully" has nothing to be faithful to. Make later exports in Claude Design with the repo imported (§11.1), so they reuse the live tokens instead of inventing parallel ones. A later export that needs a token the home lacks adds it there; one that disagrees with a live token is a question for the user, never a silent retune. A tweak too small to design stays under "ask, don't invent" (§11.3).
 
 ```
 Claude Design (upstream)  ──Export→Handoff──►  bundle.zip + copied prompt  ──ingest──►  token-home tokens  ──build──►  UI on the chosen client stack
@@ -84,15 +85,25 @@ upstream step produces:
 - **Derive, don't duplicate.** Components, the shadcn variable map, any optional
   `DESIGN.md`, and client TS types all derive from the canonical token/spec — no
   parallel hand-kept copies.
-- **Realise, don't reinterpret.** Build the handed-off design faithfully,
-  including its interaction states and breakpoints. If a state or edge case
-  isn't in the bundle (spec, screenshots, or rationale), **ask — don't invent**
-  a look (R26).
+- **Realise, don't reinterpret.** Build the handed-off design faithfully, including its interaction states and breakpoints, within the accessibility floor below. If a state or edge case isn't in the bundle (spec, screenshots, or rationale), **ask, don't invent** a look (R26), and record the answer in the repo (a token in the token home, otherwise a note in that surface's handoff folder) so the next export, made with the repo imported, picks it up. Anything bigger than a tweak is a new surface and gets its own export (§11.2).
+- **Accessibility is a floor the bundle cannot lower.** WCAG contrast (AA: 4.5:1 for body text, 3:1 for large text and for non-text UI such as focus rings and control edges), a visible focus indicator and a minimum target size override the bundle. A bundle token that fails is fixed in the token home and the user told, not shipped faithfully. Three mechanisms make the floor hold:
+  - A build-time contrast test computes the ratio of each text, icon and ring token against every surface token it actually sits on, so a retune that breaks contrast fails the build. A colour dimmed with opacity is measured as the blended colour it paints.
+  - Focus visibility is an app-wide default in the token home (reference stack: a `:focus-visible` ring from the ring token), not something each component opts into.
+  - Every interactive target meets WCAG 2.5.8's 24px minimum (or its spacing exception) under any pointer. Under a coarse pointer (`@media (pointer: coarse)`), targets also get a touch floor held as a token, typically 36px to 44px.
+- **Motion is a contract, not a flourish.** Durations and easings are tokens in the token home. Reduced motion (`prefers-reduced-motion`) is handled once, app-wide, not per component. An entrance animation on `transform` fills `backwards`, never `forwards` or `both`: a retained transform makes the element the containing block for every `position: fixed` descendant, so toolbars and dialogs inside a page that fades in are pinned to the page instead of the viewport, even when the last keyframe is `transform: none`. Reach for a motion library (reference stack: Motion; NumberFlow for animated figures) before hand-building sliding highlights, number rolls or DOM measurement.
 - **Respect the chosen primitives.** The component library chosen in §3
   (reference stack: shadcn/ui + Radix) is the substrate; retune it to the
   tokens rather than fighting it or hand-rolling parallel widgets. Where a
   treatment isn't a stock variant (e.g. a signature CTA), add a **named custom
   variant** wired to a token, not one-off inline styles.
+- **One way to do each job, written down in a UI conventions document** (for example `docs/ui-conventions.md`, linked from the agent instruction file). Duplication gates see copied text, not a second component that does the same job differently: a pill row built with `aria-pressed` beside the real one, three tooltip mechanisms, a page-local money formatter that prints a different minus glyph. So the document holds a register table, **Job | The one way | Never**, seeded when the client is scaffolded (Phase 2) with: explaining something on hover or focus, asking before something irreversible, giving focus back when a dialog closes, formatting values (money, dates, counts), and shared view state such as a date range. Each rule learned from a UI defect goes in the same document, headed by the claim it makes, in the change that found it. When a component looks like a registered one, compare what it does for a keyboard, not how it is written.
+- **Breakpoints in the bundle are intent; the container is the measure.** Realise a bundle's breakpoints as container queries against the room the content actually gets (§10.2), not as viewport widths. Phone sizes (row text, row padding, row height) are tokens in the token home like any other, never picked by eye per screen. A bundle with no breakpoints does not mean one layout fits every size: ask (R26), or make the form factor its own export (§11.2).
+- **Reference stack: Tailwind 4's cascade layers fail silently, and jsdom applies no CSS, so unit tests cannot see it.**
+  - Fonts, colours and radii are tokens in `@theme`. A hand-written class in `@layer base` that shares a utility's name (`.font-mono`) loses to the generated utility whatever the source order, and the rule simply never applies.
+  - A class a variant must reach (`hover:`, `data-[state=open]:`) has to be a utility, declared with `@utility` or supplied by a library that does. A plain class in `@layer components` is not one, so the variant compiles to nothing.
+  - A third-party stylesheet injected without a layer beats every layered rule whatever its specificity; override it with important utilities (trailing `!`).
+  - A `var()` naming a token that does not exist compiles and falls back without a word, so check the name in the token home before using it.
+  - Verify a style by reading `getComputedStyle` off a fresh element in a real browser, never the class list, and pin each load-bearing rule with a unit test that reads the stylesheet source.
 - **Theme policy comes from the bundle.** Dark-only, light-only, or themeable —
   and whether there's a switcher — is whatever the handoff specifies; structure
   the token layer to match (single theme vs. light/dark token sets).

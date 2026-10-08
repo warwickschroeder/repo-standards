@@ -21,7 +21,7 @@ the same four layers and gates with its own equivalents.
 
 | Layer | Tooling (reference stack) | Owns / proves | Speed |
 |---|---|---|---|
-| **Unit** | server: xUnit + FluentAssertions · web: Vitest + RTL | Pure logic in isolation: importers/parsers, rule engines, derivations, mappers, reducers, hooks, single components, the event bus, module discovery. Cover branches + edge cases. | Fast — run freely |
+| **Unit** | server: xUnit + AwesomeAssertions (§3.1) · web: Vitest + RTL | Pure logic in isolation: importers/parsers, rule engines, derivations, mappers, reducers, hooks, single components, the event bus, module discovery. Cover branches + edge cases. | Fast: run freely |
 | **Integration** | server: `WebApplicationFactory<Program>` + **the real chosen engine via Testcontainers** (R32 — never an in-memory substitute) | Behaviour across seams: each endpoint end-to-end, **event publish → subscriber → local read-model round-trip**, auth/authorisation, **access-boundary isolation** (§6.3), handler partial-failure — plus what only the real engine proves: CHECK constraints, foreign keys, unique indexes, real transactions, migrations applying, schema-per-module isolation, engine-specific SQL (reference stack: `ExecuteDelete`, `pg_trgm`, `ILIKE`, tsvector/GIN). | Needs Docker — one container per test assembly, template-cloned per test |
 | **Full-stack** *(optional — add when you must prove the whole app boots together)* | `Aspire.Hosting.Testing` (the full app + real DB) | Orchestration-level wiring the in-process factory doesn't cover. | Slow — not in CI; run deliberately when orchestration wiring changes (§12.6) |
 | **End-to-end (UI)** | **Playwright** as a real-backend **regression harness** — boots the real stack + DB (§12.9); no mock-backed e2e | Real user journeys in a real browser: login, navigation, each feature's critical flows, realtime push, accessibility, the design handoff's **states + breakpoints**, and **persistence** (a written row read back). | Slow — targeted tiers per change (R25); Full tier on the user's schedule (§12.6) |
@@ -38,7 +38,7 @@ records its equivalents):
 
 - Server: `dotnet build` (full type-check; analyzers + warnings-as-errors make
   it the server lint gate too) → `dotnet test`.
-- Web: `npm run lint` → `npm run build` (type-check + bundle) → `npm run test`.
+- Web: `npm run lint` → `npm run build` (type-check + bundle) → `npx vitest run` (one-shot; a bare `vitest` watches and never exits whenever the terminal looks interactive, which an agent's shell can).
 - Static gates (R33/§12.10): the **duplication** and **dead-code** checks
   whenever the change adds or removes code, and the **dependency vulnerability
   audit** whenever dependencies changed — cheap, run them freely.
@@ -78,19 +78,11 @@ module isolation (R1).
   its tree is fixed at project → namespace → class and C# Dev Kit does not
   surface xUnit `[Trait]`s as test tags.) A module with no pure-logic tests
   simply has no unit project.
-- **Integration:** tests run through the real Host via the stack's in-process
-  test factory (reference stack: `Microsoft.AspNetCore.Mvc.Testing` +
-  `WebApplicationFactory<Program>`, with `Program.cs` ending in
-  `public partial class Program;` so WAF can find it) on a **real database**
-  (**Testcontainers**, R32 — never an in-memory substitute). Repoint the whole
-  host at the container by overriding the connection string, so the real
-  registration wiring stays under test — **never swap an individual context onto
-  a different provider**. Share the container per test assembly and give each
-  test its own database by cloning a migrated template, so tests stay isolated
-  without paying a container each. The generic fixture over the context lives in
-  `TestSupport.Integration`, references only `Core`, and every module
-  integration project closes it over its own context — reuse without any module
-  referencing another (R1).
+- **Integration:** tests run through the real Host via the stack's in-process test factory (reference stack: `Microsoft.AspNetCore.Mvc.Testing` + `WebApplicationFactory<Program>`, with `Program.cs` ending in `public partial class Program;` so WAF can find it) on a **real database** (**Testcontainers**, R32, never an in-memory substitute), whose image is pinned to the same exact tag as dev (§8.1, R11). Repoint the whole host at the container by overriding the connection string, so the real registration wiring stays under test; **never swap an individual context onto a different provider**. Share the container per test assembly and give each test its own database by cloning a migrated template, so tests stay isolated without paying a container each. The generic fixture over the context lives in `TestSupport.Integration`, references only `Core`, and every module integration project closes it over its own context: reuse without any module referencing another (R1).
+- **Optional, and faster: one container for the whole run, across test processes.** Each test assembly runs in its own process, so a container per assembly pays a container start and a template migration per assembly. Reattaching every process to one container (reference stack: Testcontainers `WithReuse`) removes both, but reuse alone lets a later run clone a template migrated from an older schema, so it ships with four companions. Name the template by a fingerprint of the module builds (reference stack: a hash of the module assemblies' MVIDs), so any rebuild gets a fresh template. Create the template under an engine-level lock (reference stack: a Postgres advisory lock), so two processes cannot both find it missing and build it. Put the owning process id in each clone's name and drop clones whose process has exited, because the container outlives every run and nothing else reclaims them. Clean up the container only by its own reuse label, because reuse turns off the resource reaper and a blanket cleanup of the engine's containers also takes the dev database's.
+- **Sign in by header, and keep one suite on the real token.** The integration support project registers a test authentication scheme that builds the user, the owner (§4.4) and the roles from request headers, so a test acts as anyone without minting a token and isolation tests stay cheap. The auth module's suite still signs in through the real login and sends the real token, so the production token path stays under test. Test host settings go in as host settings (reference stack: `UseSetting`), not through `ConfigureAppConfiguration`: under minimal hosting the latter can lose to `appsettings.json`, so an empty signing key there wins and every authenticated test returns 500.
+- **Budget the engine's connections.** Each clone has its own connection string and so its own client-side pool, so idle pools from finished tests pile up towards the engine's connection cap, and pooled connections left on the template block cloning it (reference stack: Postgres refuses `CREATE DATABASE ... TEMPLATE` while the template has sessions). The clone fixture clears idle pools after migrating the template and before each clone (reference stack: `NpgsqlConnection.ClearAllPools()`). Hosted services that open connections of their own (monitors, log writers, anything on a timer) are switched off in the shared test-host defaults and switched back on only in their own module's suite. Treat the cap as a budget to check whenever a background worker is added: running out shows up as random assertion failures in unrelated tests that read like application races, not as a connection error.
+- **Every rebuilt host must actually subscribe.** A once-only subscription guard (R16) held in process-wide static state lets only the first test host in a process subscribe; every later host gets a fresh bus nobody listens to, and the failure reads as a missing domain effect rather than a wiring fault. R16 ties the guard to the bus instance for this reason. Where a static guard remains (an app still being aligned, say), the integration support project resets every module's guard before each host is built. It finds modules the way the Host does (never a hand list, which silently misses the next module to start subscribing), runs after the template migration (which boots the Host once and sets every guard), and fails loudly on a module whose static guard state it does not recognise, because that is what a renamed guard looks like.
 - **Web unit:** co-locate with source (`Foo.tsx` ↔ `Foo.test.tsx`, or
   `__tests__/`); reference stack: Vitest + React Testing Library + jsdom. (The
   client isn't a module, so co-location — not a per-module project — is the
@@ -120,6 +112,15 @@ exercising other entities. Cover **access-boundary isolation** (a caller can't s
 data outside their boundary — another user's private data, or another
 workspace/tenant's data — §6.3) and event-handler **partial-failure** paths.
 
+#### Correct, not just stable
+
+A test of a computed value (a total, a forecast, a status decision, a sign, a boundary, a double-count outcome) asserts an expected value derived independently from the requirement: worked out by hand or from a worked example, never copied from what the code emits today. A copied value only pins behaviour, so it passes just as green on a bug that was there when the test was written.
+
+- **The fixture tells the right answer from the plausible wrong one.** Name the likely wrong implementation (a flipped sign, `<=` for `<`, the wrong one of two similar fields, a double count) and choose values under which it gives a different result. Mix positive and negative balances so a wrong signing rule changes the total; put two events on the same day so a double count inflates a bucket instead of hiding in a new one.
+- **Every new test is seen failing.** Write it red first; where it pins behaviour that already exists, break that behaviour on purpose, watch the test catch it, restore it and say so. A test nobody has watched fail proves nothing.
+- **Check the restore is what ran.** A file put back with an old modification time (copied from a backup, for example) can look unchanged to an incremental build, so the next run still tests the mutant. Touch the restored file or force a full rebuild (reference stack: `dotnet build --no-incremental`, then `dotnet test --no-build`).
+- Persistence round-trips and wire-shape tests are exempt: they prove data survives (R24), not that a computation is right.
+
 ### 12.5 End-to-end (browser automation) — first-class, not deferred
 
 E2e is a **required** layer, written alongside the feature (R23), not a
@@ -130,14 +131,15 @@ Playwright) that:
   the built client against the real API): log in, navigate, perform the
   feature's core actions, and assert the user-visible outcome — not internal
   state.
-- **Cover the design handoff's states + breakpoints** (§11): empty, loading,
-  error, success; key viewports the bundle specifies. Use the per-state
-  screenshots as the acceptance reference; add visual-regression snapshots for
-  signature surfaces where useful.
+- **Cover the design handoff's states + breakpoints** (§11): empty, loading, error, success, at each width the design names. The per-state screenshots are the reference for the look, and layout is accepted by measurement (below); add visual-regression snapshots for signature surfaces where useful.
+- **Every journey also fails on a console error or a new server warning.** The spec collects the browser console and the server's log for the journey's span and fails on any error in the first or any warning or error in the second, because a journey can show the right outcome while the page throws or the server logs a failure.
+- **Measure layout, never judge it from a screenshot.** At each width, a sweep in a real browser reads the painted page: overflow by comparing an element's `scrollWidth` with its width, wrapping by counting the distinct line positions of a cell's text, contrast against the backdrop each text run actually sits on, all through `getBoundingClientRect()` and `getComputedStyle()`. Confident reads of screenshots get these wrong in both directions.
+- **Emulate the input as well as the width.** A phone run asks for a coarse pointer and no hover (Chrome DevTools Protocol: `Emulation.setEmulatedMedia`), because touch emulation alone can leave the pointer media features on `fine` and the touch-size rules never apply. It keeps the layout viewport at the emulated width (`mobile: false` in `Emulation.setDeviceMetricsOverride`), because otherwise Chrome widens the viewport to fit overflowing content and every overflow measures zero. Skip visually hidden (`sr-only`) elements and everything inside them, which report clipping that no one can see.
 - **Exercise realtime** where the app uses it: assert a push message updates the
   UI.
 - **Assert accessibility** on primary screens (roles/labels/focus order;
   optionally an axe scan) so the design's semantics survive implementation.
+- **State lives in ARIA, and focus comes back.** Selection, pressed, expanded and checked state is carried in ARIA (`aria-checked`, `aria-selected`, `aria-pressed`, `aria-expanded`), never only in a CSS class, and specs assert on it. A dialog opened from state rather than from a trigger button returns focus to a deliberate element when it closes, not to the page body, and specs assert where focus lands.
 - **Select by user-facing locators** (`getByRole`/`getByLabel`/`getByText`),
   not brittle CSS/test-id soup; seed state through the API or a test fixture,
   not by clicking through setup every time. Each spec is independent and
@@ -192,6 +194,12 @@ part of the contract:
   style/format verification (e.g. `dotnet format --verify-no-changes`) and step
   3's build **is** the analyzer/warnings-as-errors gate — two steps, one lint
   contract (R25).
+- **A coverage floor gates "maximise coverage", once, after the test steps.** Set it on each side near the coverage measured when the gate is adopted, and only ever raise it. Four rules keep the number honest:
+  1. **Collect per test project, never solution-wide.** A solution-wide coverage run races the instrumentation against the parallel build and emits reports with whole assemblies missing, which reads as a sudden collapse.
+  2. **Merge on resolved source paths.** Each report can carry a different source root, so keying the union on the raw filename splits one file into several and under-reports badly; resolve each root plus filename to one repo-relative path first, and leave out generated code such as migrations.
+  3. **Apply the floor to the union of every shard and project, never to one.** A shard runs part of the suite and covers part of the code, so a per-shard floor fails a healthy run (reference stack: switch Vitest's own threshold off in each shard and apply it to the merged report).
+  4. **Print how many reports were merged, and read it.** A shard whose reports went missing drops its lines out of the union, and the count is the plainest sign of it.
+- **A skipped job is not a passed one.** Where a required check reports a lane's combined result, it counts a skipped job as passing only when the job that decided to skip it succeeded; otherwise a broken filter skips every gate and reports green.
 - **The real-backend e2e regression harness does not run in CI** (R34). It is
   too long for a per-change pipeline. Its coverage is delivered by:
   1. **Targeted runs as change validation** (R25): for each modified module,
@@ -312,7 +320,7 @@ repo docs.
 | **Lint — code best practices** | idiomatic, safe code; also catches magic values (R27) where rules exist | Roslyn analyzers + `.editorconfig` with `TreatWarningsAsErrors` (+ `dotnet format` for style) · ESLint (typescript-eslint, `react-hooks`) | Strictest practical ruleset from day one — loosening later is easy, tightening is a slog. |
 | **Code duplication** | R29 (reuse first) | a copy-paste detector — language-agnostic tools (e.g. jscpd-style) cover both sides with one config | Set a low tolerance threshold at project start; the threshold only ever **ratchets down**, never up to make a change pass. |
 | **Dead code** | R30 (delete dead code) | unused-symbol analyzers (unused members/parameters diagnostics) + unused-dependency check · an unused files/exports/dependencies scanner (e.g. Knip-style) + the type-checker's `noUnusedLocals` | Covers unused files, exports, members, parameters, and dependencies — not just unreachable branches. |
-| **Dependency vulnerabilities** | R33(d), supporting R35 | `dotnet list package --vulnerable` (or an OSV/advisory scanner) · `npm audit` | Fail on known **high/critical** advisories. Fix by upgrading or pinning a patched version; a temporary ignore carries a justification **and an expiry date**, never an open-ended mute. |
+| **Dependency vulnerabilities** | R33(d), supporting R35 | `dotnet restore --force -p:AuditGate=true` (§3 sets which advisories fail it; `dotnet list package --vulnerable` exits 0 even when it finds some, so it is not a gate on its own) or an OSV/advisory scanner · `npm audit` | Fail on known **high/critical** advisories. Fix by upgrading or pinning a patched version; a temporary ignore carries a justification **and an expiry date**, never an open-ended mute. |
 
 Principles that hold whatever the tools are:
 
@@ -323,6 +331,8 @@ Principles that hold whatever the tools are:
   existing findings) are a *migration* device only — burn the baseline down,
   never grow it.
 - **Warnings are errors** in CI. A "warning" that can be ignored will be.
+- **A gate shows what it checked, and the count is read, not just the exit code.** Where its tool can, each gate prints a count (files scanned, reports merged, tests run), and a count far from the usual one is a failure to investigate. Two ways a gate passes having checked nothing: a duplication tool that rejects one unknown config key can discard the whole config and scan everything, and a type check run on a solution-style config with only project references (reference stack: `tsc --noEmit` on the root `tsconfig.json`) checks no file and exits 0, which is why the build (`tsc -b`) is the type gate.
+- **Pin gate tool versions** wherever a major version changed the config schema, and re-check the count on every bump, because the new version may silently discard the old config.
 - **The gates run before the build** in CI (fail fast), and per R25 before any
   change is claimed done.
 - New rules/tools adopted later get wired into the same canonical commands —

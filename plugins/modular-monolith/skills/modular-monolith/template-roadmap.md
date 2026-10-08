@@ -58,7 +58,8 @@ The blueprint is a **menu** for this repo, not a mandate. The rules that bind he
 | `design-tokens` | R26 | {{...}} | | |
 | `module-isolation` | R1, R2, R4, R5, R6, R20 | {{...}} | | |
 | `data-isolation` | R7–R11 | {{...}} | | |
-| `events` | R3, R12–R16 | {{...}} | | |
+| `events` | R3, R12–R14, R16 | {{...}} | | |
+| `event-durability` | R15 | {{...}} | | |
 | `api-shape` | R17, R18, R19 | {{...}} | | |
 | `push-channel` | R21, R22 | {{...}} | | |
 

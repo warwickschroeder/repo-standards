@@ -1,6 +1,6 @@
 {
   "name": "modular-monolith",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The modular-monolith blueprint as an installable plugin: audit a repo against it, let the user adopt or decline each area, and record the decisions in docs/ROADMAP.md so future agents enforce exactly what was chosen — and never re-litigate what was declined.",
   "author": {
     "name": "Warwick Schroeder",

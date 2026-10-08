@@ -12,11 +12,7 @@ The sections below show the Aspire reference implementation.
 
 ### 9.1 AppHost
 
-> The AppHost provisions **the database engine you chose with the user (§8)**.
-> The example below uses Postgres (`AddPostgres` + `WithPgAdmin` +
-> `postgres:17-alpine`); for SQL Server swap in `AddSqlServer`, etc. The rest of
-> the wiring — `AddDatabase`, `WithReference(db)`, `WaitFor(db)`, and the `api` /
-> `web` projects — is identical regardless of engine.
+> The AppHost provisions **the database engine you chose with the user (§8)**. The example below uses Postgres (`AddPostgres` + `WithPgAdmin`) on an exact image tag with a named data volume and an app-specific host port, following §8.1's image rules; for SQL Server swap in `AddSqlServer`, etc. The rest of the wiring (`AddDatabase`, `WithReference(db)`, `WaitFor(db)`, and the `api` and `web` projects) is identical regardless of engine.
 >
 > **Let Aspire proxy the API.** Do **not** pin `IsProxied = false` (or a fixed
 > port) on the `api` project — that breaks it behind Aspire's dev proxy. A fixed,
@@ -29,7 +25,10 @@ var builder = DistributedApplication.CreateBuilder(args);
 var pgPassword = builder.AddParameter("pg-password", secret: true);
 
 var postgres = builder
-    .AddPostgres("<app>-db", password: pgPassword, port: 5432)
+    // Any port but 5432, so another project's Postgres cannot stop this stack starting.
+    .AddPostgres("<app>-db", password: pgPassword, port: <dev-port>)
+    // An exact tag (17.6 is an example): a new major version will not start on this volume's data.
+    .WithImageTag("17.6")
     .WithDataVolume("<app>-pgdata")
     .WithPgAdmin();
 
@@ -50,11 +49,7 @@ builder.Build().Run();
 
 ### 9.2 ServiceDefaults
 
-Provides `AddServiceDefaults()` (OpenTelemetry traces/metrics/logs, service
-discovery, standard HTTP resilience) and `MapDefaultEndpoints()` (`/health` +
-`/alive`, dev-only). Modules stay **Aspire-agnostic** — they read the connection
-string from `IConfiguration.GetConnectionString("<app>")`; only the Host calls
-`AddServiceDefaults()`.
+Provides `AddServiceDefaults()` (OpenTelemetry traces/metrics/logs, service discovery, standard HTTP resilience) and `MapDefaultEndpoints()` (`/health` and `/alive`). The template maps both in Development only; change it so the liveness endpoint (`/alive`) answers in **every** environment, because a container healthcheck or load balancer calls it in production (§14, Release and operate). The detailed `/health` report can stay Development-only. Modules stay **Aspire-agnostic**: they read the connection string from `IConfiguration.GetConnectionString("<app>")`, and only the Host calls `AddServiceDefaults()`.
 
 **Dev entry point:** `dotnet run --project src/aspire/<App>.AppHost` launches the chosen
 database + API + Vite web in one terminal and opens the Aspire dashboard.

@@ -11,21 +11,13 @@ is the most common source of architecture drift.
 - **R1** `[STRICT]` A module references **only** `<App>.Core`. **Never** another
   `<App>.Modules.*`. No exceptions.
 - **R2** `<App>.Core` references **nothing** in `<App>.Modules.*`.
-- **R3** `[STRICT]` Cross-module communication happens **only** via events on the
-  in-process bus. If module B needs data from module A, B subscribes to A's
-  event and maintains its **own local read model** in B's schema.
+- **R3** `[STRICT]` Cross-module communication happens **only** via events on the in-process bus. If module B needs data from module A, B subscribes to A's event and maintains its **own local read model** in B's schema. The one exception is a **read-only aggregator** (an assistant, a search or an export across the whole app): it stores nothing, never writes, reads other modules **only through the app's own HTTP API as the calling user**, and is recorded as a deliberate deviation (§7.5).
 - **R4** Every module implements the shared **module contract** (reference
   stack: `IModule` — `Name`, `RegisterServices`, `MapEndpoints`) and is
   **mechanically constructible** by the composition machinery: no constructor
   arguments, no special setup (reference stack: `sealed`, parameterless ctor).
-- **R5** `[STRICT]` Modules are **discovered automatically** at startup —
-  reflection/assembly scan, a convention-based import, or a generated registry,
-  whatever the chosen stack supports. The composition root contains **no
-  hand-wiring** of any specific module — the single permitted exception is
-  mapping the realtime hub (it needs the concrete type).
-- **R6** The Host may reference module projects/packages **only** so the build
-  ships them alongside the host (reference stack: `<ProjectReference>` for the
-  DLL copy). **No module imports** in Host code except the one hub line.
+- **R5** `[STRICT]` Modules are **discovered automatically** at startup: reflection or assembly scan, a convention-based import, or a generated registry, whatever the chosen stack supports. The composition root contains **no hand-wiring** of any specific module; the only permitted exceptions are mapping the realtime hub (it needs the concrete type) and the admin CLI branch (R6). Runtime discovery does not reach the build: build files, container images and CI can still list modules by hand (reference stack: a Dockerfile restore stage that copies each project file, a CI shard list of test projects), so **every such list has a mechanical guard** that fails when a module is missing from it (§6.8).
+- **R6** The Host may reference module projects/packages **only** so the build ships them alongside the host (reference stack: `<ProjectReference>` for the DLL copy). **No module imports** in Host code except the one hub line and the admin CLI branch (§5), which only parses arguments and calls the `Auth` module's own provisioning functions.
 
 ### Data
 
@@ -39,19 +31,12 @@ is the most common source of architecture drift.
 - **R8** `[STRICT]` A module **must not** read another module's schema — no
   cross-module entity/model mappings, no raw SQL against a foreign schema, no
   cross-schema joins.
-- **R9** Each module owns its **own migrations**; its migrations-history
-  table/ledger lives in its **own schema** (reference stack:
-  `__EFMigrationsHistory` per schema).
+- **R9** Each module owns its **own migrations**; its migrations-history table/ledger lives in its **own schema** (reference stack: `__EFMigrationsHistory` per schema). Retiring a module is the one time its migrations remove its own data: a **teardown migration** that drops everything in its schema except the history ledger (the tool writes its record there after the migration runs) ships **one release before the module's code is deleted** (§6.9), so every environment has run it while the code still exists.
 - **R10** Migrations from day one, applied automatically at startup (reference
   stack: `Database.Migrate()`). **No schema auto-creation shortcut** (reference
   stack: `EnsureCreated`), **no hand-written SQL fix-ups** in the composition
   root.
-- **R11** `[STRICT]` **One relational engine and one data-access layer for the
-  whole app, chosen with the user (§8)** — Postgres, SQL Server, or another the
-  user names; never mix engines. Wire the matching driver/provider and
-  orchestration integration. The provider-specific snippets in this document
-  (`UseNpgsql`, `postgres:17-alpine`, `pg_trgm`, `ILIKE`) are **illustrative**
-  — substitute your chosen engine's equivalents.
+- **R11** `[STRICT]` **One relational engine and one data-access layer for the whole app, chosen with the user (§8)**: Postgres, SQL Server, or another the user names; never mix engines. Wire the matching driver/provider and orchestration integration. **Pin the engine's container image to an exact tag** (never a floating major or the orchestrator's default, which can move to a version that refuses the existing data directory) and **use that same image in dev, tests and deploy**. **Never change image family against an existing data volume** (for example glibc to musl): the two sort text differently, so indexes built by one are corrupt under the other; recreate the volume instead. The provider-specific snippets in this document (`UseNpgsql`, a pinned `postgres` image, `pg_trgm`, `ILIKE`) are **illustrative**; substitute your chosen engine's equivalents.
 
 ### Events
 
@@ -65,16 +50,8 @@ is the most common source of architecture drift.
 - **R14** **Shared** events (consumed across modules) live in
   `Core/Events/Contracts/`. **Private** events live in
   `<App>.Modules.<Feature>/Events/`.
-- **R15** Handlers resolve scoped services via a **fresh DI/composition scope
-  per event**. The bus **retries** each handler a bounded number of times and
-  then logs loudly (it **never silently swallows**), so one bad subscriber
-  can't break the publisher; cooperative cancellation (real shutdown) is
-  re-thrown, not retried. See the durability note in §4.2 for what retry does
-  **not** solve.
-- **R16** Subscriptions are wired **once, at endpoint-mapping time** (the
-  service provider exists by then), guarded by an atomic once-only check
-  (reference stack: `Interlocked.CompareExchange`) so integration-test rebuilds
-  don't double-subscribe.
+- **R15** A bus handler resolves scoped services via a **fresh DI/composition scope per event**; a durable handler uses the data context and service provider the outbox hands it and never opens a scope of its own (§4.8). The bus **retries** each handler a bounded number of times and then logs loudly (it **never silently swallows**), so one bad subscriber can't break the publisher; cooperative cancellation (real shutdown) is re-thrown, not retried. **An event that changes another module's stored data is saved through the transactional outbox** (§4.8) in the same transaction as the change it describes, so a persistent fault parks the delivery where someone can see and retry it instead of dropping it; a direct publish is only for traffic that is safe to lose: pushes, progress, sign-in revocations (§7.2), and replay requests and their answers (§4.2, §4.9). **Every handler is idempotent** (it upserts or overwrites by key) **or dedupes through an inbox row** written in the same transaction as its change, because a retry after a partial success otherwise applies the change twice. **Handlers never rely on the order modules run in**, which is an accident of their names: a push or step that must follow another module's write is driven by an event that module raises after its own commit.
+- **R16** Subscriptions are wired **once per bus, at endpoint-mapping time** (the service provider exists by then). The once-only guard is **tied to the bus instance** (reference stack: a `ConditionalWeakTable` keyed by the bus), never a single process-wide flag: its job is to stop one bus being subscribed twice, while every new host still subscribes its own bus. A static flag lets only the first host in a process subscribe, so every later integration-test host gets a bus nobody listens to, and its event-driven tests fail as if the domain were broken.
 
 ### API & DI
 
@@ -90,17 +67,11 @@ is the most common source of architecture drift.
   services, per-event handlers → **request-/event-scoped**; background workers
   → the stack's hosted-worker primitive (reference stack:
   `AddHostedService<T>`).
-- **R20** `[STRICT]` **No business service interfaces** in `Core` (no
-  `ICategoryService`, `IAccountService`). `Core` may define only **infrastructure**
-  abstractions every module needs: `IEventBus`, `ICurrentUser`. Cross-module
-  business needs go through events.
+- **R20** `[STRICT]` **No business service interfaces** in `Core` (no `I<Feature>Service`). `Core` may define only **infrastructure** abstractions modules need: `IEventBus`, `ICurrentUser`, the outbox's seams (§4.8: its durable subscriptions, writer, admin and inspector) and the other infrastructure of §4.7. Cross-module business needs go through events. The one kind of domain rule `Core` may hold is a **pure function over shared contract types** (no state, no I/O, no interface) that several modules must compute the same way (§4.7), because a copy per module lets the screens contradict each other.
 
 ### Realtime push
 
-- **R21** **One realtime push channel** for the whole app — a WebSocket/SSE hub
-  in whatever transport was chosen in §3 (reference stack: SignalR) — owned by
-  the `Notifications` module (reference stack: an empty `Hub` subclass). The
-  Host maps it explicitly — the one place Host references a module type.
+- **R21** **One realtime push channel** for the whole app, a WebSocket/SSE hub in whatever transport was chosen in §3 (reference stack: SignalR), owned by the `Notifications` module (reference stack: a `Hub` subclass that joins each connection to its owner's push group and holds no business logic, §7.1). The Host maps it explicitly, the one place outside the admin CLI branch (R6) where Host references a module type.
 - **R22** `[STRICT]` **Only** the `Notifications` module touches the push
   transport's server API (reference stack: injecting `IHubContext<...>`). Other
   modules publish domain events; Notifications translates the push-worthy ones
@@ -127,33 +98,11 @@ is the most common source of architecture drift.
   **integration test** through the real host (reference stack:
   `WebApplicationFactory<Program>`) that writes then reads back **every affected
   field by name** and asserts it survives the round-trip.
-- **R25** Before claiming done, run **and read the output of** the repo's
-  canonical gates on both sides: server lint/analysis + build/type-check then
-  tests; client lint, then build/type-check, then tests (reference stack:
-  `dotnet build` with analyzers + warnings-as-errors / `dotnet test`;
-  `npm run lint` / `npm run build` / `npm run test`) — plus the duplication and
-  dead-code gates (R33/§12.10) when the change adds or removes code, and the
-  dependency vulnerability audit when dependencies changed. The build
-  is the project-wide type-check and **lint is a separate blocking gate on both
-  sides** (it runs **before** build in CI) — a green test run alone is not
-  enough. For the **modules the change touched**, additionally run **their
-  integration tests and the targeted tier of their e2e harness** (§12.9) — the
-  per-module test projects (§12.3) make this a straight project/filter
-  selection. This targeted run is part of change validation precisely because
-  CI excludes the harness (R34).
+- **R25** Before claiming done, run **and read the output of** the repo's canonical gates on both sides: server lint/analysis + build/type-check then tests; client lint, then build/type-check, then tests (reference stack: `dotnet build` with analyzers + warnings-as-errors / `dotnet test`; `npm run lint` / `npm run build` / `npx vitest run`, the one-shot form, because a bare `vitest` behind `npm run test` is watch mode whenever the terminal looks interactive, and never exits). Add the duplication and dead-code gates (R33/§12.10) when the change adds or removes code, and the dependency vulnerability audit when dependencies changed. The build is the project-wide type-check and **lint is a separate blocking gate on both sides** (it runs **before** build in CI); a green test run alone is not enough. For the **modules the change touched**, additionally run **their integration tests and the targeted tier of their e2e harness** (§12.9); the per-module test projects (§12.3) make this a straight project/filter selection. This targeted run is part of change validation precisely because CI excludes the harness (R34).
 
 ### Design
 
-- **R26** The design input is the **Claude Design → Claude Code handoff bundle**
-  (zip + copied prompt), committed under `docs/design-handoff/` (design-first;
-  §11). Realise it faithfully — including its interaction states and breakpoints
-  — don't reinterpret or "improve" the design while coding. Lift its tokens into
-  the client's **single token home** (§11; reference stack: `globals.css`)
-  **once**; every component derives from them (never hard-code a hex/size that
-  duplicates a token). Keep the client stack the user chose (§3) — translate the
-  bundle into it, don't swap the stack to match the bundle. If a UI decision
-  isn't covered by the bundle, **ask — don't invent.** `DESIGN.md` is optional
-  and, if kept, is a *derived* summary, never the source of truth.
+- **R26** The design input is a **Claude Design → Claude Code handoff bundle** (zip + copied prompt), and it is required **per surface, not per app**: **every new screen, new form factor (phone, tablet) or new interactive surface gets its own export before implementation starts**, committed under `docs/design-handoff/<date>-<surface>/` (design-first; §11). Realise each bundle faithfully, including its interaction states and breakpoints; don't reinterpret or "improve" the design while coding. Lift its tokens into the client's **single token home** (§11; reference stack: `globals.css`) **once**; every component derives from them (never hard-code a hex/size that duplicates a token). Keep the client stack the user chose (§3): translate the bundle into it, don't swap the stack to match the bundle. For a decision too small to need an export, **ask, don't invent**, and record the answer in the repo (a token in the token home, otherwise a note in that surface's handoff folder) so the next export, made with the repo imported, picks it up (§11.3). `DESIGN.md` is optional and, if kept, is a *derived* summary, never the source of truth.
 
 ### Code quality
 
@@ -174,20 +123,11 @@ is the most common source of architecture drift.
   → **fetched from the provider at runtime behind a config-switched integration seam**
   (`Fake`/real; the general seam pattern is **§6.6**), **never hardcoded or copied into a
   table**. The provider/owner is the source of truth.
-- **R29** **Reuse first; no duplication.** Extract shared logic/data instead of copying it —
-  *unless* reuse would violate another rule (e.g. R1/R3 module isolation, or R20's "no
-  business interfaces / keep Core lean" — don't couple Core to a tech just to DRY a few
-  lines). Prefer the structural fix (shared helper/constant) over repetition; when a rule
-  blocks reuse, isolate the small idiom and note why.
+- **R29** **Reuse first; no duplication.** Extract shared logic/data instead of copying it, *unless* reuse would violate another rule (e.g. R1/R3 module isolation, or R20's "no business interfaces / keep Core lean": don't couple Core to a tech just to DRY a few lines). Prefer the structural fix (shared helper/constant) over repetition; when a rule blocks reuse, isolate the small idiom and note why. The client keeps a "one way to do each job" register in its UI conventions document (§11.3), because a duplication gate cannot see a second component that does the same job differently.
 - **R30** **Delete dead code.** No unused types/members, commented-out blocks, orphaned
   files, or unreachable branches. A deletion ships with its now-dead tests removed (R23).
   Leave the tree with less, not more.
-- **R31** **Background jobs don't poll.** No background-worker busy-wait
-  (`while + sleep(short interval)`) to find work or watch a flag. Wake on an in-process signal
-  (a `Core` signal primitive; reference stack: `JobSignal` +
-  `PeriodicTimer`/`JobSignal.WaitAsync(timeout)`) raised by the producer; use a timer
-  only for a genuine schedule or a sparse safety sweep; manual "run now" signals directly (persist a
-  flag only as a restart backstop, checked once at startup). In-process / single-host.
+- **R31** **Background jobs don't poll.** No background-worker busy-wait (`while + sleep(short interval)`) to find work or watch a flag. A worker waits on an in-process **queue that carries the work itself**, filled by the producer (a `Core` primitive, §4.7; reference stack: `IBackgroundWorkQueue<TWork>`, which carries the work item, closed over a module's own request type, §6.10), so "was I woken?" and "what for?" are one question and no second store can disagree with the signal. A timer only wakes a worker at a **due time already stored** (the earliest retry, the next run) or on a **genuine schedule** (a daily prune), never to go and look for work. A manual "run now" enqueues directly (persist a flag only as a restart backstop, checked once at startup). Each worker reports its state to Core's worker-status registry (§4.7), and its health is judged by **what it last reported**, never by how long ago, because a worker woken by a signal is rightly quiet for hours. In-process / single-host.
 - **R32** `[STRICT]` **Both test levels, and never a fake in-memory database substitute.**
   A change ships **unit** tests for its logic *and* **integration** tests for its wiring
   (R23/R24) — one is not a substitute for the other. **In-memory/substitute database test

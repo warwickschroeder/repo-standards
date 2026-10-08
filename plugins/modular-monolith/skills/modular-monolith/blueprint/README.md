@@ -69,17 +69,17 @@ Each section is its own file so you load only what the work needs. **§1 is the 
 | [§1 Rules Digest](01-rules-digest.md) | **Always.** R1–R35, the rules an agent keeps loaded. In an existing app, scoped by the adoption register. |
 | [§2 Solution Layout](02-solution-layout.md) | Judging whether a repo's project/folder shape matches, or laying out a new one. |
 | [§3 Stack Selection](03-stack-selection.md) | Before writing code that depends on a stack decision. Lists every decision and when to ask it. |
-| [§4 Core Library](04-core-library.md) | Working on the shared kernel: module contract, event bus, current-user seam, auth. |
-| [§5 Host](05-host.md) | Working on the composition root, startup guards, or module discovery. |
-| [§6 Module Template](06-module-template.md) | Adding or restructuring a module; wiring a config-switched external seam (§6.6). |
-| [§7 Standard module set](07-standard-modules.md) | Deciding which modules an app should have; the Notifications relay skeleton. |
+| [§4 Core Library](04-core-library.md) | Working on the shared kernel: module contract, event bus, the transactional outbox, rebuilding a read model, current-user seam, auth, background work and worker status. |
+| [§5 Host](05-host.md) | Working on the composition root, startup guards, module discovery, the admin CLI, the middleware pipeline or static-file caching. |
+| [§6 Module Template](06-module-template.md) | Adding (§6.8), restructuring or retiring a module; erasing an owner's data; wiring a config-switched external seam (§6.6); a background worker (§6.10). |
+| [§7 Standard module set](07-standard-modules.md) | Deciding which modules an app should have; the Notifications relay skeleton; ending a user's sign-ins before the token expires; resetting a password and temporary passwords; an optional Observability module; a read-only aggregator that reads through the API. |
 | [§8 Persistence & Migrations](08-persistence-migrations.md) | Anything touching the database engine, schemas, migrations, or seeding. |
 | [§9 Local-Dev Orchestration](09-local-dev-orchestration.md) | Working on the dev orchestrator or service defaults. |
 | [§10 Client SPA](10-client-spa.md) | Working on client structure, its rules, or its commands. |
 | [§11 Design System](11-design-system.md) | Ingesting a design handoff bundle, or touching tokens and component styling. |
 | [§12 Testing & Verification](12-testing-verification.md) | Anything about tests, CI shape, static gates, or regression runbooks. The largest and most-adopted section. |
 | [§13 Cross-cutting conventions](13-cross-cutting-conventions.md) | Error envelopes, paging, the significant-change protocol, anti-patterns, the security baseline. |
-| [§14 Build Order](14-build-order.md) | Building a new app from scratch, phase by phase. |
+| [§14 Build Order](14-build-order.md) | Building a new app from scratch, phase by phase, through to releasing and operating it. |
 | [§15 Definition of Done](15-definition-of-done.md) | Checking whether a change is finished. |
 | [§16 Aligning an existing project](16-aligning-existing-project.md) | **The entry point for an existing repo.** Audit → the user picks → align incrementally. |
-| [§17 Optional practices](17-optional-practices.md) | Offering end-user guides or hand-run smoke tests. Neither is required for alignment. |
+| [§17 Optional practices](17-optional-practices.md) | Offering end-user guides, in-app help or hand-run smoke tests. None is required for alignment. |

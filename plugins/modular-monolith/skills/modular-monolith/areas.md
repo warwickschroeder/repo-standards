@@ -18,11 +18,12 @@ Every rule R1–R35 belongs to exactly one area, so "which rules bind here?" alw
 | [`constrained-values`](#constrained-values) | Contained | R28 | §1 Code quality | `code-quality` |
 | [`seams`](#seams) | Contained | — | §6.6 | — |
 | [`queries-errors`](#queries-errors) | Contained | — | §13 | — |
-| [`no-poll`](#no-poll) | Contained | R31 | §10.2, §13 | `push-channel` (client half only) |
-| [`design-tokens`](#design-tokens) | Contained | R26 | §11.3 | — |
-| [`module-isolation`](#module-isolation) | Architectural | R1, R2, R4, R5, R6, R20 | §2, §4.1, §5, §6.1 | `testing` (safety net) |
-| [`data-isolation`](#data-isolation) | Architectural | R7, R8, R9, R10, R11 | §8 | `module-isolation` |
-| [`events`](#events) | Architectural | R3, R12, R13, R14, R15, R16 | §4.2, §4.3, §6.4, §6.5 | `module-isolation`, `data-isolation` |
+| [`no-poll`](#no-poll) | Contained | R31 | §4.7, §6.10, §10.2, §13 | `push-channel` (client half only) |
+| [`design-tokens`](#design-tokens) | Contained | R26 | §11.2, §11.3 | None |
+| [`module-isolation`](#module-isolation) | Architectural | R1, R2, R4, R5, R6, R20 | §2, §4.1, §5, §6.1, §6.8 | `testing` (safety net) |
+| [`data-isolation`](#data-isolation) | Architectural | R7, R8, R9, R10, R11 | §8, §6.9 | `module-isolation` |
+| [`events`](#events) | Architectural | R3, R12, R13, R14, R16 | §4.2, §4.3, §6.4, §6.5 | `module-isolation`, `data-isolation` |
+| [`event-durability`](#event-durability) | Architectural | R15 | §4.2, §4.8, §4.9 | `events`, `data-isolation` |
 | [`api-shape`](#api-shape) | Architectural | R17, R18, R19 | §6.3, §13 | — |
 | [`push-channel`](#push-channel) | Architectural | R21, R22 | §7.1, §5 | `module-isolation`, `events` |
 
@@ -94,9 +95,9 @@ Adoptable without touching the app's architecture. Pure additions or local clean
 
 **Rules:** none numbered; §3.
 
-**Adopted means:** dependency versions are declared centrally rather than scattered per project, so an upgrade is one edit.
+**Adopted means:** dependency versions are declared centrally rather than scattered per project, so an upgrade is one edit. Every dependency's licence has been read and allows how the app is used, including commercially if it is sold. A newly published advisory warns in the normal build and fails only the separate audit step (§3). An update bot keeps versions current: related packages grouped into one pull request, minor and patch updates merged automatically once CI is green, and major updates waiting for a person.
 
-**Audit by:** are versions pinned in one place (a central props/lockfile/workspace catalogue), or repeated across every project file?
+**Audit by:** are versions pinned in one place (a central props/lockfile/workspace catalogue), or repeated across every project file? List every direct dependency's licence and flag any that is not free for the app's use, including one whose newer major version changed its licence. Check whether the restore audit's level is set explicitly and whether an advisory can turn the normal build red. If an update bot runs, read its open pull requests and its dashboard for updates it found but could not open (a rate-limited or pull-request-limited queue): a queue full of pull requests stalled on red CI means the fix for that red is waiting behind them.
 
 ---
 
@@ -132,7 +133,7 @@ Real code changes, architecture untouched. Each is a normal change shipping its 
 
 **Rules:** none numbered; §6.6.
 
-**Adopted means:** every external service sits behind an interface with a config-switched implementation (`Fake` / real), so the app runs locally and in tests without the real dependency.
+**Adopted means:** every external service sits behind an interface with a config-switched implementation (`Off` / `Fake` / real), so the app runs locally and in tests without the real dependency; `Fake` is selected explicitly, never a fallback.
 
 **Audit by:** find the external calls. Are any constructed directly in business code with no seam?
 
@@ -150,9 +151,9 @@ Real code changes, architecture untouched. Each is a normal change shipping its 
 
 **No-poll background work** — work starts because something signalled it, not because a loop woke up.
 
-**Rules:** R31 — no background-worker busy-wait to find work or watch a flag. Wake on an in-process signal raised by the producer; use a timer only for a genuine schedule or a sparse safety sweep. The client half (§10.2) is the same rule for UI polling.
+**Rules:** R31: no background-worker busy-wait to find work or watch a flag. A worker waits on an in-process queue that carries the work, filled by the producer; a timer only wakes it at a stored due time or on a genuine schedule; health comes from what a worker last reported. The client half (§10.2) is the same rule for UI polling.
 
-**Adopted means:** `while (true) { sleep(short); check(); }` does not appear. Manual "run now" signals directly; a persisted flag is a restart backstop checked once at startup, not a polled inbox.
+**Adopted means:** `while (true) { sleep(short); check(); }` does not appear. Manual "run now" enqueues directly; a persisted flag is a restart backstop checked once at startup, not a polled inbox.
 
 **Audit by:** grep background services for sleep-in-loop, and the client for interval-based refetching that a push channel should serve.
 
@@ -162,7 +163,7 @@ Real code changes, architecture untouched. Each is a normal change shipping its 
 
 **Single design-token home** — one home for the palette and the scale; everything else derives from it.
 
-**Rules:** R26 — realise the design handoff bundle faithfully; lift its tokens into the client's single token home **once**; every component derives from them.
+**Rules:** R26: realise each design handoff bundle faithfully, with a new export for every new screen, form factor or interactive surface; lift its tokens into the client's single token home **once**; every component derives from them.
 
 **Adopted means:** no hard-coded hex or size that duplicates a token. The structural half (single token home, derive-don't-duplicate, realise-don't-reinterpret) holds regardless of what the design looks like — that is what makes this adoptable without a design handoff bundle.
 
@@ -182,7 +183,7 @@ Re-architecture projects, each individually scoped, sequenced, and given its own
 
 **Adopted means:** the dependency graph is a star, not a mesh. A new module is picked up by the composition root without anyone editing it.
 
-**Audit by:** build the actual reference graph between modules — this is the single most informative artifact of the whole audit. Then read the composition root: how much of it is hand-wiring? Then check Core for business interfaces that couple it to a feature.
+**Audit by:** build the actual reference graph between modules; this is the single most informative artifact of the whole audit. Then read the composition root: how much of it is hand-wiring? Then find the places the build still lists modules by hand (container image restore stage, CI test shards, solution file) and whether a guard fails when one is missing (R5). Then check Core for business interfaces that couple it to a feature.
 
 **Strangler-style, always:** build the new seam, move one consumer, verify, repeat. Never a big-bang rewrite.
 
@@ -194,17 +195,29 @@ Re-architecture projects, each individually scoped, sequenced, and given its own
 
 **Adopted means:** the database enforces the module boundary the code claims. This is usually the hardest area because it carries a real data-migration story.
 
-**Audit by:** how many data contexts are there? Do queries or views cross schema boundaries? Is there a single migrations history for everything? Are there hand-written SQL fix-ups at startup?
+**Audit by:** how many data contexts are there? Do queries or views cross schema boundaries? Is there a single migrations history for everything? Are there hand-written SQL fix-ups at startup? Is the database image pinned to an exact tag, the same in dev, tests and deploy (R11)? Does a schema from a retired module still hold tables other than its migrations history (R9)?
 
 ### events
 
 **Events & local read models** — modules talk by publishing, and each consumer keeps its own copy.
 
-**Rules:** R3 (cross-module communication only via events; the consumer keeps its own local read model), R12 (a small hand-rolled in-process bus — no mediator framework, no external broker), R13 (events are small immutable value types), R14 (shared events in Core, private events in the module), R15 (fresh scope per event, bounded retries, never silently swallowed), R16 (subscriptions wired once at mapping time, guarded against double-subscription).
+**Rules:** R3 (cross-module communication only via events; the consumer keeps its own local read model), R12 (a small hand-rolled in-process bus; no mediator framework, no external broker), R13 (events are small immutable value types), R14 (shared events in Core, private events in the module), R16 (subscriptions wired once per bus at mapping time, with the guard tied to the bus instance rather than a static flag).
 
 **Adopted means:** module B never calls into module A. It subscribes and keeps its own copy of what it needs.
 
-**Audit by:** find every direct cross-module call — each is a candidate event. Note that this area is where "eventual consistency" defects appear; if the repo already has a bus, check R15's retry-and-log behaviour honestly, and read the durability note in §4.2 before claiming the seam is sound.
+**Audit by:** find every direct cross-module call; each is a candidate event. Check the R16 guard's shape: a static once-only flag means every integration-test host after the first in a process has no subscribers. Whether those events survive a failure is `event-durability`, audited separately.
+
+### event-durability
+
+**Event durability**: a change another module copies is saved with its event, delivered until it lands, applied once, and applied in order.
+
+**Rules:** R15 (fresh scope per event and bounded, loud retries; an event that changes another module's stored data goes through the transactional outbox, with a direct publish kept for pushes, progress and replay traffic; every handler idempotent or deduped by an inbox row; no reliance on the order modules' handlers run in).
+
+**Adopted means:** a data-changing event commits in the same transaction as its change (§4.8); a failed delivery is retried and finally parks where a person can see, retry or skip it; a repeated delivery changes nothing; each owner's events apply in commit order; a whole-owner clear supersedes the deliveries queued before it; and any read model that can miss history has a replay-and-receipt rebuild (§4.9).
+
+**Audit by:** for every handler that writes data, find how its event is published: a direct publish after the producer's save is at-most-once, and a persistent fault silently leaves that read model wrong. Read handlers for counters and appends (`count++`, an insert with no key check) that a retry doubles. List read models added after their data existed and how they were filled. Look for repair machinery (rescans, boot snapshots, resync buttons) and the defects filed against it: a cluster there is the symptom of this gap, not a run of bad luck.
+
+**Not a scaling decision:** the at-most-once bus fails on one host, the first time a handler hits a persistent fault. Defer this area only with a revisit trigger that names the repair machinery, and treat a run of defects in it as that trigger firing (`alignment.md`, re-reviews).
 
 ### api-shape
 
@@ -222,7 +235,7 @@ Re-architecture projects, each individually scoped, sequenced, and given its own
 
 **Single push channel owned by Notifications** — one realtime transport, and one module allowed to touch it.
 
-**Rules:** R21 (one realtime push channel for the whole app, owned by the Notifications module; the Host maps it — the one place Host references a module type), R22 (only Notifications touches the push transport's server API; other modules publish domain events and Notifications translates the push-worthy ones).
+**Rules:** R21 (one realtime push channel for the whole app, owned by the Notifications module; the Host maps it, the one place outside the admin CLI branch (R6) where Host references a module type), R22 (only Notifications touches the push transport's server API; other modules publish domain events and Notifications translates the push-worthy ones).
 
 **Adopted means:** one hub, one owner. Feature modules never reach for the transport directly.
 

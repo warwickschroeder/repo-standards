@@ -17,7 +17,7 @@ Use the `modular-monolith` skill. Write from [`template-roadmap.md`](../skills/m
 
 **Creating it.** If an audit exists (`docs/specs/<date>-blueprint-alignment.md`), build the register from its outcomes. If not, and the user knows what binds, take it from them. If neither — run `/blueprint-align` first rather than guessing; a register populated by inference is worse than none, because it will be trusted.
 
-Every one of the 17 areas gets a row. An unlisted area reads as *unknown*, which is the single state this file exists to eliminate. Where an area genuinely doesn't apply, record **N/A** with the reason.
+Every one of the 18 areas gets a row. An unlisted area reads as *unknown*, which is the single state this file exists to eliminate. Where an area genuinely doesn't apply, record **N/A** with the reason.
 
 **Preserve what is already there.** An existing ROADMAP usually carries phase history, known defects and decisions that predate this template. Restructure around them; don't overwrite them. If the repo already records adoption decisions in prose (a "Blueprint alignment decisions" section is the common shape), convert it to the table **and keep the prose** — the reasoning is the part that has value, and the table is only a scannable index over it.
 
