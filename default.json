@@ -20,6 +20,8 @@
     "automerge": true,
     "schedule": ["before 6am on Friday"]
   },
+  "npmrc": "allow-remote=all",
+  "npmrcMerge": true,
   "packageRules": [
     {
       "description": "Automerge non-major updates, digests and pins. Relies on each repo's CI gating its PRs, with minimumReleaseAge as a buffer against yanked releases.",
