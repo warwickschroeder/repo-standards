@@ -89,7 +89,7 @@ The bad one invites a reviewer to go looking for the write path and file the bra
 
 ```markdown
 Bad:   - **Registration.** The clock is now registered in `AddServiceControl`.
-Good:  - **The host never registered a clock.** One arrived anyway, from telemetry, HTTP logging or YARP, whichever was switched on.
+Good:  - **The host never registered a clock**; one arrived from telemetry, HTTP logging or YARP.
 ```
 
 The first makes the reviewer read the sentence to learn anything. The second is legible from the bold text alone.
@@ -98,8 +98,18 @@ The first makes the reviewer read the sentence to learn anything. The second is 
 
 ```markdown
 Bad:   - **Validator change.** The validator omits the query terms.
-Good:  - **Page 2 could carry page 1's version.** The client is told nothing changed and keeps rows from the wrong page.
+Good:  - **Page 2 could carry page 1's version**, so the client keeps rows from the wrong page.
 ```
+
+### A bullet is a summary, not an explanation
+
+```markdown
+Bad:   - **Bodies.** `MigrationBodyLoader` reads them from RavenDB in batches of 64, then hands each to
+         `BodyStorage`, which compares its size with `MinCompressionSize` to pick inline or external storage.
+Good:  - **Bodies are stored inline or externally**, by the same rule ingestion uses.
+```
+
+The bad one is accurate and still wrong for a PR body: the reviewer reads the diff for the how. One line, the claim, done.
 
 ### Group a repeated change, do not repeat it
 
@@ -108,18 +118,13 @@ Bad:   - **SQL Server.** The lifecycle store takes the clock.
        - **PostgreSQL.** The lifecycle store takes the clock.
        - **RavenDB.** `ExpirationManager` takes the clock.
 
-Good:  - **Every persister stamps its timestamps from an injected clock.** On EF Core, so SQL Server and
-         PostgreSQL, the lifecycle store does it across all five transitions; on RavenDB `ExpirationManager`
-         computes `@expires` from it and the four archive managers take it.
+Good:  - **Every persister stamps its timestamps from an injected clock**: the EF lifecycle store, and RavenDB's expiration and archive managers.
 ```
 
 ### Explain a file whose folder does not explain it
 
 ```markdown
-Good:  - **An embedded migration source waits for the server it started.** `EmbeddedDatabase.WaitUntilReady`
-         wraps `GetServerUriAsync`, which is why a migration branch touches `src/ServiceControl.RavenDB`.
-         `Start` only queues the server up, so connecting by the configured URL reached whatever already held
-         the port. No existing caller of `EmbeddedDatabase` changed.
+Good:  - **`src/ServiceControl.RavenDB` changes so an embedded migration source waits for its own server**, not whatever holds the port.
 ```
 
 Without the reason, the reviewer reads it as scope creep and asks for it to be split out.
@@ -127,8 +132,7 @@ Without the reason, the reviewer reads it as scope creep and asks for it to be s
 ### Name the deliberate non-change with its reason
 
 ```markdown
-Good:  - **Deliberately still on the machine clock.** `CheckRavenDBIndexLag` subtracts `LastIndexingTime`,
-         which the server reports against its own clock, so an injected one would make the lag meaningless.
+Good:  - **`CheckRavenDBIndexLag` deliberately stays on the machine clock**, because the server reports lag against its own.
 ```
 
 Without this the next reader files it as an oversight and "fixes" it.
@@ -137,9 +141,7 @@ Without this the next reader files it as an oversight and "fixes" it.
 
 ```markdown
 Weak:   - `ServiceControl.Persistence.Tests`: new checkpoint tests.
-Strong: - `ServiceControl.Persistence.Tests/EFCore` (new files): the table round-tripping every column, every
-          timestamp coming back as UTC, and five transaction cases including a rollback leaving the previous
-          cursor in place and a save from an out-of-date copy being refused. Runs on SQL Server and PostgreSQL.
+Strong: - `ServiceControl.Persistence.Tests/EFCore` (new files): every column round-trips, timestamps come back UTC, and a stale save is refused, on SQL Server and PostgreSQL.
 ```
 
 One bullet per project or folder. Mark a new project `(new)` and say why it had to be separate, because that is the question a reviewer will ask.

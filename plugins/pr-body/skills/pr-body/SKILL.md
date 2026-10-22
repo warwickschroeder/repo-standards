@@ -84,17 +84,18 @@ Then **two sections, in this order, and no others:**
 1. **`## What this adds`**, or `## What this fixes`, or `## What this changes`, whichever is true.
 2. **`## Tests`**
 
-Above them, **one short paragraph in plain words**: what the change is for, then what it deliberately does not do yet, **in bold**, so nobody reviews it for something it never claimed. That is the only prose in the document.
+Above them, **one short paragraph in plain words**: what the change is for. That is the only prose in the document.
 
-Everything else is a **bullet led by a bold plain-words name**, then one to three sentences on what it does, with the real identifiers in backticks:
+Everything else is a **one-line bullet, a summary of one piece of the change**: a bold plain-words claim, then at most a short clause. No mechanism, no rationale, no call order: the diff shows how, and a design note says why. Backtick only the few identifiers a reviewer needs to find the change, and none where plain words carry it.
 
 ```markdown
-- **A stale save is refused rather than silently winning.** `MigrationCheckpoint` gains a `Version` concurrency token, so the expected value goes into the `UPDATE` statement's `WHERE` clause and a save built from an out-of-date copy matches no row.
+- **A stale save is refused rather than silently winning.**
+- **Bodies are stored inline or externally**, by the same rule ingestion uses.
 ```
 
-The bold lead-in is the claim. The rest is the evidence. A reviewer skimming only the bold text should come away with the change.
+The bold text is the claim, and on most bullets it is the whole bullet. A reviewer skimming only the bold text should come away with the change.
 
-**`## Tests` is one bullet per test project or folder** and what it covers, marking any new project `(new)`. Name what the tests prove, not what they are called, and name the backends they run on where that varies.
+**`## Tests` is one short line per test project or folder**: what it proves, marking any new project `(new)`. Name what the tests prove, not what they are called, and name the backends they run on where that varies.
 
 **Do not add these sections**, however tempting:
 
@@ -123,9 +124,8 @@ Draft to the file first and let the user read it. Do not push it to GitHub, and 
 ## Non-negotiables
 
 - **A short title, then two sections.** The title as an `H1`, then What this adds (or fixes, or changes), then Tests.
-- **The opener says what the change does not do yet, in bold.** A branch that lands a seam nothing calls, a table nothing writes to, or a command covering one case of three has to say so in its first three lines.
 - **Bold lead-ins are claims, not labels.** "The EF persister overwrote the host's choice" tells the reviewer where to look. "Registration" makes them read the bullet to find out.
-- **Bullets, not paragraphs.** The opener is the only prose. A bullet past three sentences is two bullets or it is over-explained.
+- **One line per bullet.** The opener is the only prose. A bullet that needs a second sentence is explaining the mechanism, so cut it back to the claim.
 - **Verified, not remembered, and not inherited from a commit message.**
 - **Never claim tests pass unless you ran them.** Describe the coverage as written. If the suite was not run, say so to the user, outside the document.
 - **No em dashes, and no en dashes as punctuation.** Comma, colon, brackets, full stop or semicolon.
@@ -154,4 +154,5 @@ Draft to the file first and let the user read it. Do not push it to GitHub, and 
 - **A heading per backend or module** when it is one change repeated. The reviewer reads the same sentence three times and learns nothing on the second.
 - **A "not in this PR" paragraph** that nobody will ever action.
 - **Claiming a green suite you did not run.**
+- **Bullets that explain.** A bullet carrying the how and the why reads as a design note, when the reviewer wanted the summary.
 - **Explaining the mechanism instead of the cost.** Not "the validator omits the query terms" but "page 2 could carry page 1's version, so the client keeps the wrong rows".

@@ -4,10 +4,10 @@
 
 ## What this adds
 
-<One or two plain sentences: what the change is for.> **<What it deliberately does not do yet, so nobody reviews it for something it never claimed.>**
+<One or two plain sentences: what the change is for.>
 
-- **<A piece of the change, named in plain words.>** <What it does, with the real `Identifiers` in backticks, and any limit a reader would assume away.>
-- **<The next piece.>** <Same shape. One to three sentences, never four.>
+- **<A piece of the change, named in plain words.>** <At most a short clause, such as a limit a reader would assume away. One line.>
+- **<The next piece.>** <Same shape: one line.>
 - **<A shape repeated across backends or modules.>** <Say it once and list the sites; never a heading each.>
 - **<A defect fixed in passing.>** <Deliberate, not collateral. Say so.>
 - **<Deliberately unchanged.>** <The site that looks like it should have moved, and the reason it did not, so nobody finishes the job later.>

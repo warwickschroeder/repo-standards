@@ -21,7 +21,7 @@ A **5-phase workflow**:
 
 ## What this adds
 
-<One or two plain sentences: what it is for.> **<What it deliberately does not do yet.>**
+<One or two plain sentences: what it is for.>
 
 - **<A piece of the change.>** <What it does, with `Identifiers`, and any limit a reader would assume away.>
 - **Docs.** <Where they live.>

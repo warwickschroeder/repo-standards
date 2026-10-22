@@ -19,7 +19,7 @@ Verify every claim against the source before asserting it, including any the com
 
 Open with a short PR title as an `H1`, for the author to paste into the title field: one line, sentence case, an imperative verb and the thing it acts on, naming the headline change rather than the branch. Check `gh pr list --state all --limit 20 --json title` for the repo's own convention first.
 
-Then write two sections and no others: **What this adds** (or fixes, or changes) and **Tests**. Above them one short paragraph saying what the change is for and, in bold, what it deliberately does not do yet. Everything else is a bullet with a bold plain-words lead-in and one to three sentences with real identifiers in backticks. No design-doc headings, no Size section, no checklist, no per-backend heading for one repeated change, no attribution footer.
+Then write two sections and no others: **What this adds** (or fixes, or changes) and **Tests**. Above them one short paragraph saying what the change is for. Everything else is a one-line bullet: a bold plain-words claim and at most a short clause, with no mechanism or rationale. No design-doc headings, no Size section, no checklist, no per-backend heading for one repeated change, no attribution footer.
 
 Work the branch leaves undone goes to a dated note in `.local/Analysis/`, not a "not in this PR" paragraph. Say so when you have written it.
 
