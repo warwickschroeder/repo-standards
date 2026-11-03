@@ -12,7 +12,7 @@
   "platformAutomerge": true,
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "labels": ["dependencies", "security"],
+    "labels": ["security"],
     "schedule": ["at any time"]
   },
   "lockFileMaintenance": {
