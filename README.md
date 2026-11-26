@@ -32,8 +32,7 @@ branch. To pin a version, reference a tag: `github>warwickschroeder/repo-standar
 - Schedule: weekly, `before 6am on Monday`, `Australia/Perth`
 - `minimumReleaseAge: 3 days`, `internalChecksFilter: strict`
 - `platformAutomerge: true`, PRs labelled `dependencies`
-- Security: `osvVulnerabilityAlerts` + `vulnerabilityAlerts` that bypass the weekly
-  window (`schedule: at any time`, extra `security` label)
+- Security: `osvVulnerabilityAlerts` + `vulnerabilityAlerts` that bypass the weekly window (`schedule: at any time`). They are labelled `security` only, not `dependencies`, so a repo that requires exactly one changelog category label per PR still passes
 - `lockFileMaintenance` enabled + automerged
 - `npmrc: allow-remote=all` with `npmrcMerge: true`, so Renovate's npm 12 can regenerate lock files. npm 12 refuses the registry tarball of any package with `bundleDependencies` (such as `@tailwindcss/oxide-wasm32-wasi`) with `EALLOWREMOTE` ([npm/cli#9800](https://github.com/npm/cli/issues/9800)). It applies only to Renovate's lock file runs, and the merge keeps each repo's own `.npmrc`. Remove it once npm/cli#9800 is fixed.
 - Automerge: all `minor`/`patch`/`pin`/`digest`; `major` held for Dependency
